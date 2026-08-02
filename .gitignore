@@ -1,0 +1,25 @@
+# Секрети — ніколи в git
+*.token
+*.p8
+.env
+.env.*
+config.json
+credentials/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Кеш резолвера
+.cache/
+
+# macOS
+.DS_Store
