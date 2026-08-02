@@ -68,26 +68,43 @@ applemusic-mcp login --chrome
 
 ## Use
 
-```bash
-aimc pull "Japan 70-80s" -o playlists/japan.yaml
-```
+You talk; the tool works. There is no workflow to learn and no file to manage.
 
-```bash
-aimc resolve tracklist.txt
-```
+> Here's a list of songs I found. Make me a playlist.
 
-`resolve` reads a plain list of `artist — title` lines, searches the catalog and
-prints what it found, what it is unsure about, and what it could not find. It
-writes nothing.
+> Build something like my Japan 70-80s playlist, but only the originals.
 
-## Playlists as files
+> Check this playlist — does it actually match its name?
 
-A playlist is described by a YAML file that lives in git next to the code, with
-ISRCs as the track identity. That buys four things the streaming service does
-not give you: you review the tracklist before anything is written, `git diff`
-shows exactly what changed and when, a deleted playlist is one command from
-being restored, and the same file can target a different service later because
-an ISRC is not Apple-specific.
+> Clean it up: kill the duplicates and anything that isn't from the era.
+
+Ask in whatever words you'd use with a person. Underneath, each of those becomes
+the same handful of operations: search the catalog, match text to real
+recordings, compare against what's already there, and — only after you approve —
+write.
+
+### Nothing is written until you say so
+
+Before anything reaches your library you see the finished thing: the exact
+tracklist in order, what's being added, what's being removed, and where a match
+was uncertain. For a new playlist you also get a few suggested names and
+descriptions to pick from, or you type your own. Then it writes.
+
+### History you don't have to think about
+
+Every version of every playlist this tool touches is kept automatically. You
+never save, export, or name a file. If you want to know what changed last
+Tuesday, or put a playlist back the way it was, ask — the answer is already
+recorded.
+
+Under the hood a playlist is a text file identified by ISRCs rather than
+Apple-specific ids, which is what makes the history diffable and what will let
+the same playlist target another service later. You are not expected to care.
+
+### For scripting
+
+There is a CLI underneath if you want one — `aimc --help`. It is the machinery,
+not the point.
 
 ## Security
 
