@@ -126,3 +126,21 @@ class TestNormalize:
     def test_empty(self):
         assert normalize("") == ""
         assert key("") == ""
+
+
+class TestJapaneseVariantMarkers:
+    """A Japanese catalog marks its variants in Japanese. Found on the first
+    live run, where a karaoke cut scored as a perfect match."""
+
+    def test_karaoke_in_katakana(self):
+        assert "カラオケ" in has_variant_marker("ひとり上手 (オリジナル・カラオケ)")
+
+    def test_album_version_in_katakana(self):
+        assert "ヴァージョン" in has_variant_marker("初恋 (アルバム・ヴァージョン)")
+
+    def test_plain_japanese_title_is_clean(self):
+        assert has_variant_marker("夏をあきらめて", "めぐりあい") == []
+
+    def test_no_word_boundary_needed_in_japanese(self):
+        # Japanese does not space its words; a boundary test would miss this
+        assert "カラオケ" in has_variant_marker("初恋オリジナルカラオケ集")

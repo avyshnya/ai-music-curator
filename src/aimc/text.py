@@ -26,6 +26,20 @@ VARIANT_MARKERS = (
     "mix",
     "off vocal",
     "guide melody",
+    # A Japanese catalog marks its variants in Japanese. Without these, a
+    # karaoke cut of a Japanese song scores as a perfect match — which is
+    # exactly what happened on the first live run.
+    "カラオケ",       # karaoke
+    "オリジナル・カラオケ",  # "original karaoke" — the backing track
+    "ライブ",         # live
+    "ライヴ",         # live, alternate transliteration
+    "リミックス",      # remix
+    "カバー",         # cover
+    "バージョン",      # version
+    "ヴァージョン",     # version, alternate transliteration
+    "リマスター",      # remaster
+    "インストゥルメンタル",  # instrumental
+    "アコースティック",   # acoustic
 )
 
 _FEAT = re.compile(r"\s*[\(\[]?\s*(feat\.?|ft\.?|featuring|with)\s+[^)\]]*[\)\]]?", re.I)
@@ -153,11 +167,19 @@ def has_variant_marker(*fields: str) -> list[str]:
     found = []
     for m in VARIANT_MARKERS:
         needle = _flatten(m)
-        # Whole words only, plural allowed. A bare substring test would flag
-        # "ver." inside "Forever" and "Silver"; requiring an exact word would
-        # miss the album "Bittersweet Song Covers", which is precisely the
-        # signal that told us May J.'s track was a cover.
-        if needle and re.search(rf"\b{re.escape(needle)}(?:s|es)?\b", blob):
+        if not needle:
+            continue
+        if _HAS_LATIN.search(needle):
+            # Whole words only, plural allowed. A bare substring test would flag
+            # "ver." inside "Forever" and "Silver"; requiring an exact word would
+            # miss the album "Bittersweet Song Covers", which is precisely the
+            # signal that told us May J.'s track was a cover.
+            hit = re.search(rf"\b{re.escape(needle)}(?:s|es)?\b", blob)
+        else:
+            # Japanese does not put spaces between words, so word boundaries are
+            # meaningless here — a plain substring test is the correct one.
+            hit = needle in blob
+        if hit:
             found.append(m)
     return found
 

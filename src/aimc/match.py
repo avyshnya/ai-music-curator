@@ -171,5 +171,11 @@ def best_matches(songs: list[Song], q: Query, limit: int = 5) -> list[Match]:
     """Score, filter and rank candidates. Best first, hopeless ones dropped."""
     ranked = [score(s, q) for s in collapse_same_recording(songs)]
     ranked = [m for m in ranked if m.score >= REVIEW]
-    ranked.sort(key=lambda m: (-m.score, m.year or 9999))
+    # Ties are broken towards the earliest recording and then the earliest
+    # release — otherwise two equally-scoring cuts of the same song are ordered
+    # by whatever sequence the search happened to return, which on the first
+    # live run put a 1990 "album version" ahead of the 1983 original.
+    ranked.sort(
+        key=lambda m: (-m.score, m.year or 9999, m.song.release_date or "9999")
+    )
     return ranked[:limit]
