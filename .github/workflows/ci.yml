@@ -1,0 +1,24 @@
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Lint
+        run: uv run --with ruff ruff check src tests
+      - name: Test
+        # The suite never touches Apple Music: matching runs on catalog rows
+        # captured verbatim, and the library layer runs against a fake provider.
+        run: uv run --python ${{ matrix.python }} --with pytest --with typer pytest -q
+        env:
+          PYTHONPATH: src
