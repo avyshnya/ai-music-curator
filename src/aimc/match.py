@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .providers.base import Song
-from .text import has_variant_marker, isrc_year, key, loose_key, title_variants
+from .text import has_variant_marker, key, loose_key, recording_year, title_variants
 
 # Confidence thresholds. Anything below REVIEW is not offered at all: a wrong
 # match that looks confident is worse than an admitted gap.
@@ -102,11 +102,11 @@ def score(song: Song, q: Query) -> Match:
 
     artist = _field_score(q.artist_forms, song.artist)
     if artist == 0.0:
-        return Match(song, 0.0, isrc_year(song.isrc), ["different artist"])
+        return Match(song, 0.0, recording_year(song.isrc, song.release_date), ["different artist"])
 
     title = _field_score(q.title_forms, song.title)
     if title == 0.0:
-        return Match(song, 0.0, isrc_year(song.isrc), ["different title"])
+        return Match(song, 0.0, recording_year(song.isrc, song.release_date), ["different title"])
 
     if artist < 1.0:
         reasons.append("artist spelling differs")
@@ -125,7 +125,7 @@ def score(song: Song, q: Query) -> Match:
         total -= min(0.15 * len(unwanted), 0.45)
         reasons.append("looks like a " + "/".join(unwanted))
 
-    year = isrc_year(song.isrc)
+    year = recording_year(song.isrc, song.release_date)
     if q.era:
         lo, hi = q.era
         if year is None:

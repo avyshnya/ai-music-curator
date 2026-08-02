@@ -40,6 +40,18 @@ VARIANT_MARKERS = (
     "リマスター",      # remaster
     "インストゥルメンタル",  # instrumental
     "アコースティック",   # acoustic
+    # Portuguese and Spanish. Same lesson as the Japanese block: a Portuguese
+    # library marks its live cuts "Ao Vivo", and without these three live
+    # recordings from one session album sat in a playlist unflagged.
+    "ao vivo",       # pt — live
+    "em directo",    # pt — live
+    "acustico",      # pt/es — acoustic (diacritics are folded before matching)
+    "versao",        # pt — version
+    "remasterizado",  # pt/es — remastered
+    "en vivo",       # es — live
+    "en directo",    # es — live
+    "sesion",        # es — session
+    "session",       # a studio-session performance is not the studio original
 )
 
 _FEAT = re.compile(r"\s*[\(\[]?\s*(feat\.?|ft\.?|featuring|with)\s+[^)\]]*[\)\]]?", re.I)
@@ -203,3 +215,29 @@ def isrc_year(isrc: str | None) -> int | None:
         return None
     n = int(yy)
     return 1900 + n if n > 30 else 2000 + n
+
+
+def release_year(release_date: str | None) -> int | None:
+    """Year from an ISO-ish release date, if it looks like one."""
+    if not release_date or len(release_date) < 4 or not release_date[:4].isdigit():
+        return None
+    return int(release_date[:4])
+
+
+def recording_year(isrc: str | None, release_date: str | None) -> int | None:
+    """Best estimate of when a recording was actually made.
+
+    Neither signal is reliable alone, and they fail in opposite directions:
+
+    - `releaseDate` reports the release being served, so a 1976 single reissued
+      digitally in 2007 claims 2007 — too late.
+    - The ISRC year is the year the code was *assigned*, which is usually the
+      recording, but a track re-distributed later can be issued a fresh code —
+      a real case in this library reads release 2018 with an ISRC saying 2023.
+
+    Both errors point the same way: the wrong value is the later one. So the
+    earlier of the two is the better estimate, and taking it fixes both cases
+    with one rule.
+    """
+    years = [y for y in (isrc_year(isrc), release_year(release_date)) if y]
+    return min(years) if years else None

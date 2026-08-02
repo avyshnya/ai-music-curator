@@ -109,7 +109,10 @@ class TestPicksTheOriginal:
         q = Query(artist="Yumi Matsutoya", title="futou wo wataru kaze", era=(1970, 1989))
         top = best_matches(FUTOU, q)
         assert top[0].song.artist == "Yumi Matsutoya"
-        assert top[0].year == 1981  # ISRC year; the release is dated 1978
+        # Release says 1978, the ISRC says 1981, and 1978 is the true year.
+        # Taking the earlier of the two gets this right where the ISRC alone
+        # did not.
+        assert top[0].year == 1978
 
 
 class TestSpellingTolerance:

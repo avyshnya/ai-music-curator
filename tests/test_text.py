@@ -7,6 +7,7 @@ from aimc.text import (
     key,
     loose_key,
     normalize,
+    recording_year,
     title_variants,
 )
 
@@ -144,3 +145,47 @@ class TestJapaneseVariantMarkers:
     def test_no_word_boundary_needed_in_japanese(self):
         # Japanese does not space its words; a boundary test would miss this
         assert "カラオケ" in has_variant_marker("初恋オリジナルカラオケ集")
+
+
+class TestPortugueseVariantMarkers:
+    """Found on a real Portuguese playlist: three live tracks from one session
+    album sat unflagged because the marker list was English + Japanese only."""
+
+    def test_ao_vivo(self):
+        assert "ao vivo" in has_variant_marker("Espelho (Ao Vivo)")
+
+    def test_ao_vivo_in_album_name(self):
+        markers = has_variant_marker(
+            "Caos", "Mariana Froes no Estúdio Showlivre (Ao Vivo)"
+        )
+        assert "ao vivo" in markers
+
+    def test_diacritics_folded_before_matching(self):
+        # "Acústico" must match the accent-free needle
+        assert "acustico" in has_variant_marker("Amor (Acústico)")
+
+    def test_spanish_en_vivo(self):
+        assert "en vivo" in has_variant_marker("Yo Soy Eterna (En Vivo)")
+
+    def test_plain_portuguese_title_is_clean(self):
+        assert has_variant_marker("Coração Marruá", "O Amor e Suas Variáveis") == []
+
+
+class TestRecordingYear:
+    """Release date and ISRC fail in opposite directions; take the earlier."""
+
+    def test_reissue_release_is_too_late(self):
+        # Junko Sakurada: served as a 2007 reissue, recorded 1976
+        assert recording_year("JPVI07600320", "2007-07-18") == 1976
+
+    def test_reassigned_isrc_is_too_late(self):
+        # Player Tauz: released 2018, ISRC issued 2023
+        assert recording_year("USJ3V2338354", "2018-01-01") == 2018
+
+    def test_agrees_when_both_agree(self):
+        assert recording_year("JPTO08210010", "1982-06-21") == 1982
+
+    def test_falls_back_to_whichever_exists(self):
+        assert recording_year(None, "1975-02-20") == 1975
+        assert recording_year("JPVI07302990", None) == 1973
+        assert recording_year(None, None) is None
