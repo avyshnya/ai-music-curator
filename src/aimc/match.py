@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .providers.base import Song
-from .text import has_variant_marker, key, loose_key, recording_year, title_variants
+from .text import key, loose_key, recording_year, title_variants, variant_markers
 
 # Confidence thresholds. Anything below REVIEW is not offered at all: a wrong
 # match that looks confident is worse than an admitted gap.
@@ -119,7 +119,7 @@ def score(song: Song, q: Query) -> Match:
     # the song that was asked for, unless it was asked for.
     allowed = {v.lower() for v in q.allow_variants}
     unwanted = [
-        m for m in has_variant_marker(song.title, song.album or "") if m not in allowed
+        m for m in variant_markers(song.title, song.album) if m not in allowed
     ]
     if unwanted:
         total -= min(0.15 * len(unwanted), 0.45)

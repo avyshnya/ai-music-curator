@@ -169,6 +169,30 @@ def _flatten(s: str) -> str:
     return _SPACES.sub(" ", s).strip()
 
 
+# Markers that mean nothing when they appear in an ALBUM title. A compilation
+# called "Single & Cover Collection" contains covers *and* originals, so the
+# album name cannot make any single track a cover — it flagged a genuine 1981
+# original on the first live run. By contrast a "Live at …" or "(Ao Vivo)"
+# album really does make every track on it a live recording.
+_ALBUM_UNRELIABLE = frozenset(
+    {"cover", "version", "ver.", "カバー", "バージョン", "ヴァージョン", "versao"}
+)
+
+
+def variant_markers(title: str, album: str | None = None) -> list[str]:
+    """Variant markers for a recording, weighing where each was found.
+
+    Everything in the track title counts. From the album title, only markers
+    that describe every track on the record are accepted.
+    """
+    found = list(has_variant_marker(title))
+    if album:
+        for m in has_variant_marker(album):
+            if m not in _ALBUM_UNRELIABLE and m not in found:
+                found.append(m)
+    return found
+
+
 def has_variant_marker(*fields: str) -> list[str]:
     """Return which variant markers appear across the given fields.
 

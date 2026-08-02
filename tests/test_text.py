@@ -9,6 +9,7 @@ from aimc.text import (
     normalize,
     recording_year,
     title_variants,
+    variant_markers,
 )
 
 
@@ -189,3 +190,25 @@ class TestRecordingYear:
         assert recording_year(None, "1975-02-20") == 1975
         assert recording_year("JPVI07302990", None) == 1973
         assert recording_year(None, None) is None
+
+
+class TestAlbumMarkersAreWeighed:
+    """A compilation title cannot make one of its tracks a cover. Found live:
+    a genuine 1981 original was flagged because its best-of album is called
+    "Single & Cover Collection"."""
+
+    def test_cover_in_album_name_is_ignored(self):
+        assert variant_markers(
+            "ひとり上手", "Platinum Best Ken Naoko Single & Cover Collection"
+        ) == []
+
+    def test_cover_in_track_title_still_counts(self):
+        assert "cover" in variant_markers("Hitori Jouzu (Cover)", None)
+
+    def test_live_album_still_marks_every_track(self):
+        assert "ao vivo" in variant_markers(
+            "Caos", "Mariana Froes no Estúdio Showlivre (Ao Vivo)"
+        )
+
+    def test_karaoke_album_still_counts(self):
+        assert "カラオケ" in variant_markers("初恋", "GOLDEN☆BEST オリジナル・カラオケ集")

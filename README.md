@@ -55,16 +55,26 @@ matched through an English translation of the title.
 ## Install
 
 ```bash
-uv tool install ai-music-curator
+uv tool install git+https://github.com/avyshnya/ai-music-curator
 ```
 
-Sign in once — this reads the Apple Music session from a browser you log into
-yourself. The token is stored in your OS keychain, never in this repo, and is
-scoped to Apple Music only.
+Sign in once. A browser window opens; you log in yourself. The token goes to
+your OS keychain, never into this repo, and is scoped to Apple Music alone — it
+gives no access to your Apple ID, payments or any other Apple service.
 
 ```bash
 applemusic-mcp login --chrome
 ```
+
+Then open Claude Code in any folder and talk. The bundled skill
+(`.claude/skills/music-curator/`) teaches Claude when and how to use this — to
+get it, clone the repo and work inside it:
+
+```bash
+git clone https://github.com/avyshnya/ai-music-curator
+```
+
+Revoke access any time with `applemusic-mcp logout`.
 
 ## Use
 
@@ -92,10 +102,13 @@ descriptions to pick from, or you type your own. Then it writes.
 
 ### History you don't have to think about
 
-Every version of every playlist this tool touches is kept automatically. You
-never save, export, or name a file. If you want to know what changed last
-Tuesday, or put a playlist back the way it was, ask — the answer is already
-recorded.
+Every playlist this tool touches is copied before and after each change,
+automatically. You never save, export or name a file. Ask what changed, or to
+put a playlist back the way it was, and the answer already exists — Apple Music
+itself keeps no history at all, so this is the only undo there is.
+
+Copies live under `~/.local/share/ai-music-curator/snapshots/`, outside the
+repository, because they are your listening data and not source code.
 
 Under the hood a playlist is a text file identified by ISRCs rather than
 Apple-specific ids, which is what makes the history diffable and what will let
