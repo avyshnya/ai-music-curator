@@ -28,6 +28,9 @@ class Song:
     release_date: str | None = None
     isrc: str | None = None
     duration_ms: int | None = None
+    # Canonical Apple link. Opens the track in the Music app or the web player,
+    # so a report can be listened to instead of only read.
+    url: str | None = None
 
 
 @dataclass(frozen=True)

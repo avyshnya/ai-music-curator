@@ -159,4 +159,5 @@ class AppleMusic:
             release_date=a.get("releaseDate"),
             isrc=a.get("isrc"),
             duration_ms=a.get("durationInMillis"),
+            url=a.get("url"),
         )
