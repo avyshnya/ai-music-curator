@@ -45,3 +45,7 @@ testpaths = ["tests"]
 "src/aimc/cli.py" = ["B008"]
 # A single HTML/CSS template string; wrapping its lines would hurt readability.
 "src/aimc/htmlview.py" = ["E501"]
+# Same reason: these hold HTML/CSS templates where wrapping hurts readability.
+"src/aimc/dashboard.py" = ["E501"]
+"src/aimc/naming.py" = ["E501"]
+"src/aimc/cover.py" = ["E501"]

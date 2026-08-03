@@ -135,6 +135,62 @@ def cmd_stats(
         typer.echo(f"  {v:2}  {k}")
 
 
+@app.command("dashboard")
+def cmd_dashboard(
+    out: Path = typer.Option(None, "--out", help="Write the page here instead of a temp file."),
+    open_it: bool = typer.Option(True, "--open/--no-open", help="Open in your browser."),
+) -> None:
+    """One page for everything you have: services, then detail for each."""
+    import tempfile
+
+    from .dashboard import render
+    from .librarywide import overview, scan, scan_findings
+    from .picker import open_in_browser
+
+    lib = _lib()
+    typer.echo("читаю бібліотеку — це один запит на трек, буде не миттєво…")
+    s = scan(lib)
+    data = [(overview(s, "Apple Music"), scan_findings(s))]
+    path = Path(out) if out else Path(tempfile.gettempdir()) / "aimc-dashboard.html"
+    path.write_text(render(data), encoding="utf-8")
+    typer.echo(str(path))
+    if open_it:
+        open_in_browser(path.resolve().as_uri())
+
+
+@app.command("cover")
+def cmd_cover(
+    playlist: str,
+    subtitle: str = typer.Option("", help="Small line under the title."),
+    palette: str = typer.Option("sunset", help="sunset · dusk · neon · warm"),
+    shape: str = typer.Option("sun", help="sun · ring · peak"),
+    out: Path = typer.Option(Path("covers"), help="Where to write the files."),
+    open_it: bool = typer.Option(True, "--open/--no-open"),
+) -> None:
+    """Generate cover art for a playlist.
+
+    Attaching it stays manual: Apple exposes no way to set playlist artwork.
+    """
+    from .cover import PALETTES, SHAPES, make
+    from .picker import open_in_browser
+
+    if palette not in PALETTES:
+        _die(f"палітри {palette!r} немає — є: {', '.join(PALETTES)}")
+    if shape not in SHAPES:
+        _die(f"форми {shape!r} немає — є: {', '.join(SHAPES)}")
+    svg_path, png_path = make(playlist, subtitle or "", Path(out), palette, shape)
+    typer.echo(str(svg_path))
+    if png_path:
+        typer.echo(str(png_path))
+        if open_it:
+            open_in_browser(png_path.resolve().as_uri())
+    else:
+        typer.secho("PNG не зроблено — не знайдено Chrome для рендеру",
+                    fg=typer.colors.YELLOW)
+    typer.secho("Постав її руками: Music.app → правий клік на плейлісті → "
+                "Edit Playlist → перетягни файл", fg=typer.colors.YELLOW)
+
+
 @app.command("audit")
 def cmd_audit(
     playlist: str,
@@ -243,6 +299,43 @@ def cmd_remove(
     except (PlaylistNotFound, NotEditable) as e:
         _die(str(e))
     typer.secho(f"removed {len(entry_ids)} entry(ies)", fg=typer.colors.GREEN)
+
+
+@app.command("scan")
+def cmd_scan() -> None:
+    """Checks that only make sense across the whole library."""
+    from .librarywide import scan, scan_findings
+    s = scan(_lib())
+    finds = scan_findings(s)
+    typer.echo(f"{len(s.own)} своїх плейлістів, {len(finds)} зауважень\n")
+    for f in finds:
+        typer.echo(str(f))
+    if not finds:
+        typer.secho("бібліотека чиста", fg=typer.colors.GREEN)
+
+
+@app.command("play")
+def cmd_play(
+    playlist: str,
+    number: int = typer.Argument(..., help="Номер треку зі списку show."),
+) -> None:
+    """Play one track of a playlist in the Music app (macOS)."""
+    from .nowplaying import NotSupported, play_in_app
+    try:
+        p, tracks = _lib().tracks(playlist)
+    except PlaylistNotFound as e:
+        _die(str(e))
+    if not 1 <= number <= len(tracks):
+        _die(f"у {p.name!r} треків {len(tracks)}, а просять #{number}")
+    s = tracks[number - 1].song
+    if not s.url:
+        _die("у цього треку немає посилання")
+    try:
+        ok, msg = play_in_app(s.url)
+    except NotSupported as e:
+        _die(str(e))
+    typer.secho(f"{'▶' if ok else '×'} {s.artist} — {s.title}",
+                fg=typer.colors.GREEN if ok else typer.colors.RED)
 
 
 @app.command("create")

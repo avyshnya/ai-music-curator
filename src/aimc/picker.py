@@ -8,6 +8,9 @@ selection back and the caller simply receives it.
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
+import sys
 import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -41,6 +44,27 @@ _DONE_UI = (
     '<button onclick="done()" style="font:inherit;padding:10px 18px;border:0;'
     'border-radius:10px;background:#22c55e;color:#fff">Готово</button></div>'
 )
+
+
+def open_in_browser(url: str) -> None:
+    """Open a URL in the user's real browser.
+
+    `webbrowser.open` can be captured by whatever embedded viewer happens to be
+    registered, and an embedded pane may refuse non-localhost schemes or block
+    the page's own requests. On macOS `open` always hands the URL to the real
+    default browser, which is what someone wants when they are about to listen
+    to something.
+    """
+    if sys.platform == "darwin" and shutil.which("open"):
+        try:
+            subprocess.run(["open", url], check=False, timeout=10)
+            return
+        except Exception:
+            pass
+    try:
+        webbrowser.open(url)
+    except Exception:
+        pass
 
 
 def choose(playlist: Playlist, tracks: list[PlaylistTrack], port: int = 8777) -> list[int]:
@@ -88,10 +112,7 @@ def choose(playlist: Playlist, tracks: list[PlaylistTrack], port: int = 8777) ->
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     url = f"http://127.0.0.1:{port}/"
     print(f"Відкрий і познач: {url}")
-    try:
-        webbrowser.open(url)
-    except Exception:
-        pass
+    open_in_browser(url)
     stop.wait()
     srv.shutdown()
     return result.get("keep", [])
