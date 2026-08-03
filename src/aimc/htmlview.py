@@ -45,17 +45,30 @@ def _row(i: int, t: PlaylistTrack, pick: bool = False) -> str:
     href = _link(s)
     label = html.escape(f"{s.artist} — {s.title}")
 
-    body_inner = f'<span class="t">{title}</span><span class="a">{sub}</span>'
-    body = (
-        f'<a class="body" href="{html.escape(href)}">{body_inner}<span class="p">&#9654;</span></a>'
-        if href else f'<span class="body">{body_inner}</span>'
+    art = ""
+    if s.artwork_url:
+        src = s.artwork_url.replace("{w}", "120").replace("{h}", "120")
+        art = f'<img class="art" src="{html.escape(src)}" alt="" loading="lazy">'
+
+    # A 30-second preview playing in the page. The Music app has no standalone
+    # song view — every track link opens the album it belongs to — so playing
+    # here is the only way to audition a track without losing your place.
+    play = ""
+    if s.preview_url:
+        play = (
+            f'<button class="play" data-src="{html.escape(s.preview_url)}" '
+            f'aria-label="Слухати">&#9654;</button>'
+        )
+
+    open_app = (
+        f'<a class="ext" href="{html.escape(href)}" title="Відкрити в Apple Music">&#8599;</a>'
+        if href else ""
     )
-    # In pick mode a checkbox (checked = keep) sits on the left; tapping the title
-    # still opens the app, so choosing and auditioning happen on one screen.
+    body = f'<span class="body"><span class="t">{title}</span><span class="a">{sub}</span></span>'
     cb = f'<input type="checkbox" class="cb" checked data-l="{label}">' if pick else ""
     return (
-        f'<div class="row">{cb}<span class="n">{i}</span>{body}'
-        f'<span class="y">{year}</span></div>'
+        f'<div class="row">{cb}<span class="n">{i}</span>{art}{play}{body}'
+        f'<span class="y">{year}</span>{open_app}</div>'
     )
 
 
@@ -191,11 +204,27 @@ def render(playlist: Playlist, tracks: list[PlaylistTrack], pick: bool = False) 
   .a {{ display: block; font-size: 14px; color: color-mix(in srgb, CanvasText 55%, Canvas); }}
   .y {{ flex: 0 0 auto; font-variant-numeric: tabular-nums; font-size: 14px;
         color: color-mix(in srgb, CanvasText 45%, Canvas); }}
-  .p {{ font-size: 14px; color: #22c55e; }}{pick_css}
+  .art {{ flex:0 0 auto; width:44px; height:44px; border-radius:6px; object-fit:cover; }}
+  .play {{ flex:0 0 auto; width:34px; height:34px; border-radius:50%; border:0; cursor:pointer;
+    background:#22c55e; color:#fff; font-size:13px; line-height:1; }}
+  .play.on {{ background:#e11d48; }}
+  .ext {{ flex:0 0 auto; text-decoration:none; font-size:15px;
+    color:color-mix(in srgb,CanvasText 45%,Canvas); padding:0 4px; }}{pick_css}
 </style></head>
 <body><div class="wrap">
 <h1>{name}</h1>
 <div class="meta">{len(tracks)} треків{(" · " + desc) if desc else ""} · {hint}</div>
 {rows}
 {footer}
-</div>{script}</body></html>"""
+</div>
+<script>
+  var au = new Audio(), cur = null;
+  au.addEventListener('ended', function(){{ if (cur) {{ cur.innerHTML='\\u25B6'; cur.classList.remove('on'); cur=null; }} }});
+  document.addEventListener('click', function(e){{
+    var b = e.target.closest('.play'); if (!b) return;
+    if (cur === b) {{ au.pause(); b.innerHTML='\\u25B6'; b.classList.remove('on'); cur=null; return; }}
+    if (cur) {{ cur.innerHTML='\\u25B6'; cur.classList.remove('on'); }}
+    au.src = b.dataset.src; au.play();
+    b.innerHTML='\\u23F8'; b.classList.add('on'); cur=b;
+  }});
+</script>{script}</body></html>"""

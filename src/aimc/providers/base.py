@@ -31,6 +31,12 @@ class Song:
     # Canonical Apple link. Opens the track in the Music app or the web player,
     # so a report can be listened to instead of only read.
     url: str | None = None
+    # 30-second preview served by Apple, and cover art. Both let a listener
+    # audition a track in place instead of being thrown into the album view —
+    # the Music app has no standalone song page, so a track link always opens
+    # the album it sits on.
+    preview_url: str | None = None
+    artwork_url: str | None = None
 
 
 @dataclass(frozen=True)

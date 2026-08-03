@@ -165,4 +165,6 @@ class AppleMusic:
             isrc=a.get("isrc"),
             duration_ms=a.get("durationInMillis"),
             url=a.get("url"),
+            preview_url=(a.get("previews") or [{}])[0].get("url"),
+            artwork_url=(a.get("artwork") or {}).get("url"),
         )

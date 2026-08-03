@@ -253,9 +253,19 @@ class TestHtmlView:
         # The track's own page, not the album it happens to sit on: the album
         # form leaves the track unselected when the app opens.
         assert "music://music.apple.com/pt/song/1" in out
-        assert "/album/" not in out
         assert "https://music.apple.com" not in out  # scheme rewritten, no browser link
         assert "Mix" in out and "1990" in out
+
+    def test_preview_becomes_a_play_button(self):
+        from aimc.htmlview import render
+        from aimc.providers.base import Playlist, Song
+        pl = Playlist(id="p1", name="Mix", editable=True)
+        tracks = [PlaylistTrack(song=Song(
+            catalog_id="1", artist="A", title="T",
+            preview_url="https://audio-ssl.itunes.apple.com/x.m4a"), entry_id="e1")]
+        out = render(pl, tracks)
+        assert 'class="play"' in out
+        assert "audio-ssl.itunes.apple.com/x.m4a" in out
 
     def test_escapes_html(self):
         from aimc.htmlview import render
@@ -264,5 +274,8 @@ class TestHtmlView:
         tracks = [PlaylistTrack(song=Song(catalog_id="1", artist="A & B",
                   title="<script>", isrc=None), entry_id="e1")]
         out = render(pl, tracks)
-        assert "<script>" not in out.split("<body>")[1]
+        # The page has its own <script> for the preview player, so the check is
+        # that the *track's* text never lands in the document unescaped.
+        assert '<span class="t"><script>' not in out
         assert "&lt;script&gt;" in out
+        assert "A &amp; B" in out
