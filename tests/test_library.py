@@ -340,3 +340,28 @@ class TestFullPlayNeedsTheLibrary:
                      self._tracks(), in_library=False)
         assert 'class="app"' not in out
         assert 'class="play"' in out     # the preview still works
+
+
+class TestSilencing:
+    """One source of sound at a time. Wiring the app-pause into only the
+    new-track branch left it playing under a resumed preview."""
+
+    def _page(self):
+        from aimc.htmlview import render
+        from aimc.providers.base import Playlist, Song
+        tracks = [PlaylistTrack(song=Song(
+            catalog_id="1", artist="A", title="T",
+            url="https://music.apple.com/pt/album/x/1?i=2",
+            preview_url="https://audio-ssl.itunes.apple.com/x.m4a"), entry_id="e1")]
+        return render(Playlist(id="p", name="Mine", editable=True), tracks)
+
+    def test_every_start_path_silences_the_app(self):
+        page = self._page()
+        # new preview, resumed preview, and the mini-player button
+        assert page.count("hushApp()") >= 4
+
+    def test_page_starts_silent(self):
+        """Opening the page must not resume whatever the app was playing."""
+        page = self._page()
+        before_listener = page.split("addEventListener('click'")[0]
+        assert "hushApp();" in before_listener

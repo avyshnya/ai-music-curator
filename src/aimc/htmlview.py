@@ -227,7 +227,8 @@ def render(playlist: Playlist, tracks: list[PlaylistTrack], pick: bool = False,
     background:#22c55e; color:#fff; font-size:13px; line-height:1; }}
   .play.on {{ background:#e11d48; }}
   .app {{ flex:0 0 auto; width:38px; height:38px; border-radius:50%; border:0;
-    cursor:pointer; font-size:21px; line-height:1;
+    cursor:pointer; font-size:28px; line-height:1; padding:0;
+    display:flex; align-items:center; justify-content:center;
     background:color-mix(in srgb,#fa2b56 18%,Canvas); color:#fa2b56; }}
   .app:hover {{ background:#fa2b56; color:#fff; }}
   .app.busy {{ opacity:.5; }}
@@ -284,6 +285,10 @@ def render(playlist: Playlist, tracks: list[PlaylistTrack], pick: bool = False,
       seek=document.getElementById('seek'), cu=document.getElementById('cu'),
       du=document.getElementById('du');
   function fmt(s){{ s=Math.max(0,s|0); return (s/60|0)+':'+('0'+(s%60)).slice(-2); }}
+  // Anything that starts sound here must silence the app first, on EVERY path:
+  // starting a new preview, resuming a paused one, and the mini-player button.
+  // Wiring it to only one of the three left the app playing underneath.
+  function hushApp(){{ fetch('/pause', {{method:'POST'}}).catch(function(){{}}); }}
   function icon(b,p){{ b.innerHTML = p ? '\\u23F8' : '\\u25B6'; }}
   function stopCur(){{ if(cur){{ icon(cur,false); cur.closest('.row').classList.remove('playing'); }} }}
   au.addEventListener('timeupdate', function(){{
@@ -298,9 +303,13 @@ def render(playlist: Playlist, tracks: list[PlaylistTrack], pick: bool = False,
   seek.addEventListener('change', function(){{
     if(au.duration) au.currentTime = seek.value/1000*au.duration; seeking=false; }});
   mbtn.addEventListener('click', function(){{
-    if(au.paused){{ au.play(); icon(mbtn,true); if(cur) icon(cur,true); }}
+    if(au.paused){{ hushApp(); au.play(); icon(mbtn,true); if(cur) icon(cur,true); }}
     else {{ au.pause(); icon(mbtn,false); if(cur) icon(cur,false); }}
   }});
+  // Opening the page must not start anything. The app may still be playing
+  // from a previous visit, and arriving at a quiet screen that makes noise is
+  // simply wrong.
+  hushApp();
   document.addEventListener('click', function(e){{
     var m=e.target.closest('.app');
     if(m){{
@@ -316,11 +325,11 @@ def render(playlist: Playlist, tracks: list[PlaylistTrack], pick: bool = False,
     }}
     var b=e.target.closest('.play'); if(!b) return;
     if(cur===b && !au.paused){{ au.pause(); icon(b,false); icon(mbtn,false); return; }}
-    if(cur===b && au.paused){{ au.play(); icon(b,true); icon(mbtn,true); return; }}
+    if(cur===b && au.paused){{ hushApp(); au.play(); icon(b,true); icon(mbtn,true); return; }}
     stopCur();
     // Whichever starts last wins: two sources playing at once is noise, and
     // the app keeps going on its own unless it is told to stop.
-    fetch('/pause', {{method:'POST'}}).catch(function(){{}});
+    hushApp();
     cur=b; au.src=b.dataset.src; au.play();
     icon(b,true); icon(mbtn,true);
     b.closest('.row').classList.add('playing');
