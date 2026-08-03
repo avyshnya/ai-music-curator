@@ -8,11 +8,8 @@ in chat afterwards.
 from __future__ import annotations
 
 import html
-import json
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from .picker import open_in_browser
+from .picker import serve_once
 
 _CSS = """
   :root { color-scheme: light dark; }
@@ -54,7 +51,7 @@ def _opts(kind: str, values: list[str]) -> str:
 
 
 def choose(names: list[str], descriptions: list[str], count: int,
-           port: int = 8801) -> tuple[str, str] | None:
+           port: int = 0, timeout: float | None = None) -> tuple[str, str] | None:
     """Ask for a name and description. Returns None if the page was closed."""
     page = f"""<!doctype html>
 <html lang="uk"><head><meta charset="utf-8">
@@ -83,38 +80,7 @@ def choose(names: list[str], descriptions: list[str], count: int,
   }}
 </script></body></html>"""
 
-    result: dict = {}
-    stop = threading.Event()
-
-    class H(BaseHTTPRequestHandler):
-        def log_message(self, *a):
-            pass
-
-        def do_GET(self):
-            b = page.encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(b)))
-            self.end_headers()
-            self.wfile.write(b)
-
-        def do_POST(self):
-            n = int(self.headers.get("Content-Length", 0))
-            try:
-                result.update(json.loads(self.rfile.read(n)))
-            except Exception:
-                pass
-            self.send_response(204)
-            self.end_headers()
-            stop.set()
-
-    srv = HTTPServer(("127.0.0.1", port), H)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    url = f"http://127.0.0.1:{port}/"
-    print(f"Обери назву: {url}")
-    open_in_browser(url)
-    stop.wait()
-    srv.shutdown()
-    if not result.get("name"):
+    result = serve_once(page, port=port, timeout=timeout, announce="Обери назву")
+    if not result or not result.get("name"):
         return None
     return result["name"], result.get("desc", "")

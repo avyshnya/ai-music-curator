@@ -10,8 +10,13 @@ and follow it. It lists every command, which ones are safe to run freely, and ho
 to read an audit. Claude Code loads it automatically; other assistants should read
 it as their first step when the user mentions playlists, songs or their library.
 
-Three rules from that file matter enough to repeat here:
+Four rules from that file matter enough to repeat here:
 
+- **Never put a list of songs in the conversation — show it with `aimc pick`.**
+  Not a numbered list, not a table, not an HTML file you wrote yourself. `aimc
+  pick` opens the user's real browser with cover art, a 30-second preview and a
+  checkbox per track, and hands their answer back as JSON. Exit code 2 means the
+  window was closed with no answer: change nothing.
 - **Never write to the library until the user has seen the exact final result and
   said yes.** A general "go ahead" earlier in the conversation is not approval of
   a specific change. Every write command requires `--yes` for this reason.
