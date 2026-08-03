@@ -54,27 +54,20 @@ matched through an English translation of the title.
 
 ## Install
 
-```bash
-uv tool install git+https://github.com/avyshnya/ai-music-curator
-```
-
-Sign in once. A browser window opens; you log in yourself. The token goes to
-your OS keychain, never into this repo, and is scoped to Apple Music alone — it
-gives no access to your Apple ID, payments or any other Apple service.
+One command. It installs what is missing, signs you in, and stops.
 
 ```bash
-applemusic-mcp login --chrome
+git clone https://github.com/avyshnya/ai-music-curator && cd ai-music-curator && ./setup.sh
 ```
 
-Then open Claude Code in any folder and talk. The bundled skill
-(`.claude/skills/music-curator/`) teaches Claude when and how to use this — to
-get it, clone the repo and work inside it:
+A browser opens once so you can sign in to Apple Music yourself — the token
+goes to your OS keychain, never into this repo, and is scoped to Apple Music
+alone. It lasts about 180 days. Revoke it any time with `applemusic-mcp logout`.
 
-```bash
-git clone https://github.com/avyshnya/ai-music-curator
-```
+Then open Claude Code in that folder and say what you want. Nothing else to set
+up, no files to manage.
 
-Revoke access any time with `applemusic-mcp logout`.
+Running `./setup.sh` again is safe: each step checks whether it is already done.
 
 ## Use
 

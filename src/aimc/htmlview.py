@@ -14,6 +14,18 @@ from .text import recording_year
 
 _APP = "music://music.apple.com"
 
+# Drawn, not typed. A glyph like ▶ is painted in the upper part of its em box
+# with empty space below, so centring the box still leaves the triangle high.
+# In SVG the shape and its box are the same thing, so centre means centre.
+_PLAY_SVG = ('<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">'
+             '<path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>')
+_PAUSE_SVG = ('<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">'
+              '<rect x="4" y="2.5" width="3" height="11" fill="currentColor"/>'
+              '<rect x="9" y="2.5" width="3" height="11" fill="currentColor"/></svg>')
+_NOTE_SVG = ('<svg viewBox="0 0 16 16" width="19" height="19" aria-hidden="true">'
+             '<path d="M13 1.5v8.2a2.6 2.6 0 1 1-1.6-2.4V4.1L6.6 5.2v6.3'
+             'a2.6 2.6 0 1 1-1.6-2.4V3.4z" fill="currentColor"/></svg>')
+
 
 def _link(song) -> str:
     """Deep link that lands on the TRACK, not on the album it sits in.
@@ -60,7 +72,7 @@ def _row(i: int, t: PlaylistTrack, pick: bool = False,
         play = (
             f'<button class="play" data-src="{html.escape(s.preview_url)}" '
             f'data-t="{title}" data-a="{html.escape(s.artist)}" '
-            f'data-art="{html.escape(art_src)}" aria-label="Слухати">&#9654;</button>'
+            f'data-art="{html.escape(art_src)}" aria-label="Слухати">{_PLAY_SVG}</button>'
         )
 
     # Full playback, as opposed to the 30-second preview next to it. The page
@@ -77,7 +89,7 @@ def _row(i: int, t: PlaylistTrack, pick: bool = False,
             f'<button class="app" data-title="{title}" '
             f'data-artist="{html.escape(s.artist)}" '
             f'data-app="{html.escape(href)}" '
-            f'title="Слухати повністю в Apple Music">&#9834;</button>'
+            f'title="Слухати повністю в Apple Music">{_NOTE_SVG}</button>'
         )
     body = f'<span class="body"><span class="t">{title}</span><span class="a">{sub}</span></span>'
     cb = f'<input type="checkbox" class="cb" checked data-l="{label}">' if pick else ""
@@ -275,7 +287,7 @@ def render(playlist: Playlist, tracks: list[PlaylistTrack], pick: bool = False,
   <div id="mtop">
     <img id="mart" alt="">
     <span id="minfo"><span id="mt"></span><span id="ma"></span></span>
-    <button id="mbtn" aria-label="Пауза">&#9208;</button>
+    <button id="mbtn" aria-label="Пауза">{_PAUSE_SVG}</button>
   </div>
   <div id="mbar"><span id="cu">0:00</span>
     <input id="seek" type="range" min="0" max="1000" value="0" step="1" aria-label="Перемотати">
