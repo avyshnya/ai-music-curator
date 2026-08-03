@@ -146,6 +146,11 @@ class AppleMusic:
         if not ok:
             raise RuntimeError(f"Could not rename playlist: {msg}")
 
+    def delete_playlist(self, playlist_id: str) -> None:
+        ok, msg = amp_api.delete_playlist(playlist_id)
+        if not ok:
+            raise RuntimeError(f"Could not delete playlist: {msg}")
+
     # --- internals ----------------------------------------------------------
 
     @staticmethod

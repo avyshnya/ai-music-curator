@@ -58,6 +58,10 @@ class FakeProvider:
     def rename_playlist(self, pid, name):
         self.data[pid] = Playlist(id=pid, name=name, editable=True)
 
+    def delete_playlist(self, pid):
+        del self.data[pid]
+        del self.tracks[pid]
+
 
 @pytest.fixture
 def lib(tmp_path, monkeypatch):
@@ -210,3 +214,28 @@ class TestMergeAndDedupe:
         ]
         lib.dedupe("Mine")
         assert len(snapshots.load(lib.history("Mine")[0])["tracks"]) == 2
+
+
+class TestDelete:
+    def test_snapshots_before_deleting(self, lib):
+        lib.delete("Mine")
+        hist = snapshots.history("p1")  # id survives in the snapshot store
+        assert hist and snapshots.load(hist[-1])["reason"] == "before delete"
+
+    def test_playlist_is_gone(self, lib):
+        lib.delete("Mine")
+        with pytest.raises(PlaylistNotFound):
+            lib.find("Mine")
+
+    def test_curated_playlist_refused(self, lib):
+        with pytest.raises(NotEditable):
+            lib.delete("Apple Picks")
+
+    def test_restore_recreates_from_snapshot(self, lib):
+        before = lib.snapshot("Mine", "manual")
+        lib.delete("Mine")
+        # user makes a fresh empty playlist of the same name, then restores
+        lib.provider.create_playlist("Mine")
+        lib.provider.tracks[[k for k,v in lib.provider.data.items() if v.name=="Mine"][0]] = []
+        lib.restore("Mine", before)
+        assert len(lib.tracks("Mine")[1]) == 2

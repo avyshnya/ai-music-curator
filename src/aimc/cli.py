@@ -265,6 +265,28 @@ def cmd_dedupe(
     typer.secho(f"removed {len(dupes)}", fg=typer.colors.GREEN)
 
 
+@app.command("delete")
+def cmd_delete(
+    playlist: str,
+    yes: bool = typer.Option(False, "--yes", help="Required. Without it, this only previews."),
+) -> None:
+    """Delete a playlist. Snapshots it first so restore is still possible."""
+    lib = _lib()
+    try:
+        p, tracks = lib.tracks(playlist)
+    except PlaylistNotFound as e:
+        _die(str(e))
+    typer.echo(f"{p.name} — {len(tracks)} tracks")
+    if not yes:
+        typer.secho("preview — pass --yes to delete", fg=typer.colors.YELLOW)
+        return
+    try:
+        lib.delete(playlist)
+    except NotEditable as e:
+        _die(str(e))
+    typer.secho(f"deleted {p.name!r}", fg=typer.colors.GREEN)
+
+
 @app.command("restore")
 def cmd_restore(
     playlist: str,

@@ -147,6 +147,17 @@ class Library:
         self._after(p, "restore")
         return p
 
+    def delete(self, name_or_id: str) -> Playlist:
+        """Delete a playlist.
+
+        A snapshot is taken first, as with every write. Apple keeps no undo, so
+        that snapshot is the only way back — restore() recreates the tracklist
+        into a fresh playlist. Refuses Apple-curated playlists like any write.
+        """
+        p, _ = self._guard(name_or_id, "delete")
+        self.provider.delete_playlist(p.id)
+        return p
+
     # --- merge and dedupe ---------------------------------------------------
 
     def duplicate_entries(self, name_or_id: str) -> list[PlaylistTrack]:
