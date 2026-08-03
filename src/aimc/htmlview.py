@@ -55,9 +55,11 @@ def _row(i: int, t: PlaylistTrack, pick: bool = False) -> str:
     # here is the only way to audition a track without losing your place.
     play = ""
     if s.preview_url:
+        art_src = (s.artwork_url or "").replace("{w}", "120").replace("{h}", "120")
         play = (
             f'<button class="play" data-src="{html.escape(s.preview_url)}" '
-            f'aria-label="Слухати">&#9654;</button>'
+            f'data-t="{title}" data-a="{html.escape(s.artist)}" '
+            f'data-art="{html.escape(art_src)}" aria-label="Слухати">&#9654;</button>'
         )
 
     open_app = (
@@ -163,8 +165,10 @@ def render(playlist: Playlist, tracks: list[PlaylistTrack], pick: bool = False) 
     # Everything below is CSS only, no JavaScript. These pages are usually
     # opened in a file preview on a phone, where scripts do not run — a button
     # that needs JS is simply dead, which is exactly what happened.
+    # Blue, deliberately: green now means "playing", so a green checkbox would
+    # read as a play state rather than a choice.
     pick_css = """
-  .cb { flex:0 0 auto; width:24px; height:24px; accent-color:#22c55e; }
+  .cb { flex:0 0 auto; width:24px; height:24px; accent-color:#2563eb; }
   .row:has(.cb:not(:checked)) { opacity:.45; }
   .row:has(.cb:not(:checked)) .t { text-decoration:line-through; }
   .note { margin-top:20px; padding:14px; border-radius:12px;
@@ -209,22 +213,89 @@ def render(playlist: Playlist, tracks: list[PlaylistTrack], pick: bool = False) 
     background:#22c55e; color:#fff; font-size:13px; line-height:1; }}
   .play.on {{ background:#e11d48; }}
   .ext {{ flex:0 0 auto; text-decoration:none; font-size:15px;
-    color:color-mix(in srgb,CanvasText 45%,Canvas); padding:0 4px; }}{pick_css}
+    color:color-mix(in srgb,CanvasText 45%,Canvas); padding:0 4px; }}
+  .row.playing {{ background:color-mix(in srgb,#22c55e 12%,Canvas); }}
+  /* One sticky stack at the bottom: the player sits above the confirm bar
+     instead of underneath it. Two independently sticky elements overlapped. */
+  #dock {{ position:sticky; bottom:0; z-index:5; margin-top:16px;
+    display:flex; flex-direction:column; gap:8px;
+    padding-bottom:8px; background:Canvas; }}
+  #mini {{ padding:12px;
+    background:color-mix(in srgb,CanvasText 10%,Canvas);
+    border:1px solid color-mix(in srgb,CanvasText 18%,Canvas);
+    border-radius:14px; display:none; }}
+  #mini.on {{ display:block; }}
+  #mtop {{ display:flex; align-items:center; gap:12px; }}
+  #mart {{ width:44px; height:44px; border-radius:6px; object-fit:cover; }}
+  #minfo {{ flex:1 1 auto; min-width:0; }}
+  #mt {{ display:block; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+  #ma {{ display:block; font-size:13px; color:color-mix(in srgb,CanvasText 55%,Canvas); }}
+  #mbtn {{ width:40px; height:40px; border-radius:50%; border:0; cursor:pointer;
+    background:#22c55e; color:#fff; font-size:15px; }}
+  #mbar {{ display:flex; align-items:center; gap:10px; margin-top:10px;
+    font-size:12px; font-variant-numeric:tabular-nums;
+    color:color-mix(in srgb,CanvasText 55%,Canvas); }}
+  #seek {{ flex:1 1 auto; -webkit-appearance:none; appearance:none; height:6px;
+    border-radius:3px; background:color-mix(in srgb,CanvasText 20%,Canvas); cursor:pointer; }}
+  #seek::-webkit-slider-thumb {{ -webkit-appearance:none; width:16px; height:16px;
+    border-radius:50%; background:#22c55e; cursor:pointer; }}
+  #seek::-moz-range-thumb {{ width:16px; height:16px; border:0; border-radius:50%;
+    background:#22c55e; cursor:pointer; }}{pick_css}
 </style></head>
 <body><div class="wrap">
 <h1>{name}</h1>
 <div class="meta">{len(tracks)} треків{(" · " + desc) if desc else ""} · {hint}</div>
 {rows}
+<div id="dock">
+<div id="mini">
+  <div id="mtop">
+    <img id="mart" alt="">
+    <span id="minfo"><span id="mt"></span><span id="ma"></span></span>
+    <button id="mbtn" aria-label="Пауза">&#9208;</button>
+  </div>
+  <div id="mbar"><span id="cu">0:00</span>
+    <input id="seek" type="range" min="0" max="1000" value="0" step="1" aria-label="Перемотати">
+    <span id="du">0:30</span></div>
+</div>
 {footer}
 </div>
+</div>
 <script>
-  var au = new Audio(), cur = null;
-  au.addEventListener('ended', function(){{ if (cur) {{ cur.innerHTML='\\u25B6'; cur.classList.remove('on'); cur=null; }} }});
-  document.addEventListener('click', function(e){{
-    var b = e.target.closest('.play'); if (!b) return;
-    if (cur === b) {{ au.pause(); b.innerHTML='\\u25B6'; b.classList.remove('on'); cur=null; return; }}
-    if (cur) {{ cur.innerHTML='\\u25B6'; cur.classList.remove('on'); }}
-    au.src = b.dataset.src; au.play();
-    b.innerHTML='\\u23F8'; b.classList.add('on'); cur=b;
+(function(){{
+  var au=new Audio(), cur=null, seeking=false;
+  var mini=document.getElementById('mini'), mbtn=document.getElementById('mbtn'),
+      seek=document.getElementById('seek'), cu=document.getElementById('cu'),
+      du=document.getElementById('du');
+  function fmt(s){{ s=Math.max(0,s|0); return (s/60|0)+':'+('0'+(s%60)).slice(-2); }}
+  function icon(b,p){{ b.innerHTML = p ? '\\u23F8' : '\\u25B6'; }}
+  function stopCur(){{ if(cur){{ icon(cur,false); cur.closest('.row').classList.remove('playing'); }} }}
+  au.addEventListener('timeupdate', function(){{
+    if(seeking||!au.duration) return;
+    seek.value = Math.round(au.currentTime/au.duration*1000);
+    cu.textContent = fmt(au.currentTime);
   }});
+  au.addEventListener('loadedmetadata', function(){{ du.textContent = fmt(au.duration); }});
+  au.addEventListener('ended', function(){{ stopCur(); cur=null; icon(mbtn,false); }});
+  seek.addEventListener('input', function(){{ seeking=true; cu.textContent =
+    fmt(seek.value/1000*(au.duration||30)); }});
+  seek.addEventListener('change', function(){{
+    if(au.duration) au.currentTime = seek.value/1000*au.duration; seeking=false; }});
+  mbtn.addEventListener('click', function(){{
+    if(au.paused){{ au.play(); icon(mbtn,true); if(cur) icon(cur,true); }}
+    else {{ au.pause(); icon(mbtn,false); if(cur) icon(cur,false); }}
+  }});
+  document.addEventListener('click', function(e){{
+    var b=e.target.closest('.play'); if(!b) return;
+    if(cur===b && !au.paused){{ au.pause(); icon(b,false); icon(mbtn,false); return; }}
+    if(cur===b && au.paused){{ au.play(); icon(b,true); icon(mbtn,true); return; }}
+    stopCur();
+    cur=b; au.src=b.dataset.src; au.play();
+    icon(b,true); icon(mbtn,true);
+    b.closest('.row').classList.add('playing');
+    document.getElementById('mt').textContent=b.dataset.t;
+    document.getElementById('ma').textContent=b.dataset.a;
+    document.getElementById('mart').src=b.dataset.art||'';
+    mini.classList.add('on');
+  }});
+}})();
 </script>{script}</body></html>"""

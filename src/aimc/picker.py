@@ -35,7 +35,7 @@ _DONE_JS = """
 </script>"""
 
 _DONE_UI = (
-    '<div class="note" style="position:sticky;bottom:0;display:flex;gap:12px;'
+    '<div class="note" style="display:flex;gap:12px;'
     'align-items:center;justify-content:space-between">'
     '<span id="cnt"></span>'
     '<button onclick="done()" style="font:inherit;padding:10px 18px;border:0;'
