@@ -52,6 +52,9 @@ def play_track(playlist: str, title: str, artist: str = "") -> tuple[bool, str]:
         set pl to first user playlist whose name is "{_esc(playlist)}"
         set hits to (every track of pl whose {cond})
         if (count of hits) is 0 then return "NOTFOUND"
+        -- reveal first: playing alone leaves the window showing whatever was
+        -- open before, so the screen and the sound disagree.
+        reveal item 1 of hits
         play item 1 of hits
         delay 0.6
         return (name of current track) & " — " & (artist of current track)

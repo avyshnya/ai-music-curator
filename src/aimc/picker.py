@@ -67,14 +67,15 @@ def open_in_browser(url: str) -> None:
         pass
 
 
-def choose(playlist: Playlist, tracks: list[PlaylistTrack], port: int = 8777) -> list[int]:
+def choose(playlist: Playlist, tracks: list[PlaylistTrack], port: int = 8777,
+           in_library: bool = True) -> list[int]:
     """Open the list in a browser and block until Done is pressed.
 
     Returns the indexes (0-based) of the tracks left checked. Ctrl-C, or closing
     without pressing Done, leaves the caller with nothing — which is the safe
     outcome, since no selection means no change.
     """
-    page = render(playlist, tracks, pick=True)
+    page = render(playlist, tracks, pick=True, in_library=in_library)
     # The note tells the reader to report numbers by hand; here the button does
     # it for them, so swap that paragraph for the real control.
     start = page.find('<div class="note">')
@@ -105,6 +106,16 @@ def choose(playlist: Playlist, tracks: list[PlaylistTrack], port: int = 8777) ->
             # Start a full track in the Music app. Separate from the page's own
             # 30-second preview, and separate from finishing the selection —
             # listening must not end the picking session.
+            if self.path == "/pause":
+                try:
+                    from .nowplaying import pause
+                    pause()
+                except Exception:
+                    pass
+                self.send_response(204)
+                self.end_headers()
+                return
+
             if self.path == "/play":
                 try:
                     from .nowplaying import play_track

@@ -33,7 +33,8 @@ def _link(song) -> str:
     return f"{_APP}/{store}/song/{song.catalog_id}"
 
 
-def _row(i: int, t: PlaylistTrack, pick: bool = False) -> str:
+def _row(i: int, t: PlaylistTrack, pick: bool = False,
+         in_library: bool = True) -> str:
     s = t.song
     year = recording_year(s.isrc, s.release_date) or ""
     title = html.escape(s.title)
@@ -62,13 +63,16 @@ def _row(i: int, t: PlaylistTrack, pick: bool = False) -> str:
             f'data-art="{html.escape(art_src)}" aria-label="Слухати">&#9654;</button>'
         )
 
-    # Full playback, as opposed to the 30-second preview next to it. When the
-    # page is served locally the button asks the server, which drives Music.app
-    # over AppleScript and actually starts the song. Opened as a plain file
-    # there is no server, so it falls back to the link — which lands on the
-    # album, the best the URL scheme can do.
+    # Full playback, as opposed to the 30-second preview next to it. The page
+    # asks the local server, which drives Music.app over AppleScript.
+    #
+    # Only offered for tracks that are IN the library. AppleScript can only see
+    # what the library holds — a catalog track being considered for adding is
+    # invisible to it, verified: a track from a playlist is found, an arbitrary
+    # catalog track returns zero hits. Showing a button that cannot work is
+    # worse than not showing one, so candidates get the preview only.
     open_app = ""
-    if s.url:
+    if s.url and in_library:
         open_app = (
             f'<button class="app" data-title="{title}" '
             f'data-artist="{html.escape(s.artist)}" '
@@ -164,8 +168,9 @@ def render_stats(playlist: Playlist, stats) -> str:
     return _page(playlist.name, body)
 
 
-def render(playlist: Playlist, tracks: list[PlaylistTrack], pick: bool = False) -> str:
-    rows = "\n".join(_row(i, t, pick) for i, t in enumerate(tracks, 1))
+def render(playlist: Playlist, tracks: list[PlaylistTrack], pick: bool = False,
+           in_library: bool = True) -> str:
+    rows = "\n".join(_row(i, t, pick, in_library) for i, t in enumerate(tracks, 1))
     name = html.escape(playlist.name)
     desc = html.escape(playlist.description or "")
     hint = "тап по назві відкриває Apple Music"
@@ -221,8 +226,8 @@ def render(playlist: Playlist, tracks: list[PlaylistTrack], pick: bool = False) 
   .play {{ flex:0 0 auto; width:34px; height:34px; border-radius:50%; border:0; cursor:pointer;
     background:#22c55e; color:#fff; font-size:13px; line-height:1; }}
   .play.on {{ background:#e11d48; }}
-  .app {{ flex:0 0 auto; width:30px; height:30px; border-radius:50%; border:0;
-    cursor:pointer; font-size:14px; line-height:1;
+  .app {{ flex:0 0 auto; width:38px; height:38px; border-radius:50%; border:0;
+    cursor:pointer; font-size:21px; line-height:1;
     background:color-mix(in srgb,#fa2b56 18%,Canvas); color:#fa2b56; }}
   .app:hover {{ background:#fa2b56; color:#fff; }}
   .app.busy {{ opacity:.5; }}
@@ -300,6 +305,7 @@ def render(playlist: Playlist, tracks: list[PlaylistTrack], pick: bool = False) 
     var m=e.target.closest('.app');
     if(m){{
       m.classList.add('busy');
+      au.pause(); stopCur(); icon(mbtn,false); mini.classList.remove('on');
       fetch('/play', {{method:'POST', body: JSON.stringify(
         {{title:m.dataset.title, artist:m.dataset.artist}})}})
         .then(function(r){{ if(!r.ok) throw 0; au.pause(); stopCur(); icon(mbtn,false);
@@ -312,6 +318,9 @@ def render(playlist: Playlist, tracks: list[PlaylistTrack], pick: bool = False) 
     if(cur===b && !au.paused){{ au.pause(); icon(b,false); icon(mbtn,false); return; }}
     if(cur===b && au.paused){{ au.play(); icon(b,true); icon(mbtn,true); return; }}
     stopCur();
+    // Whichever starts last wins: two sources playing at once is noise, and
+    // the app keeps going on its own unless it is told to stop.
+    fetch('/pause', {{method:'POST'}}).catch(function(){{}});
     cur=b; au.src=b.dataset.src; au.play();
     icon(b,true); icon(mbtn,true);
     b.closest('.row').classList.add('playing');

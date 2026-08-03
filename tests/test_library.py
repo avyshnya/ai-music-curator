@@ -312,3 +312,31 @@ class TestFullPlayButton:
         tracks = [PlaylistTrack(song=Song(catalog_id="1", artist="A", title="T"),
                                 entry_id="e1")]
         assert 'class="app"' not in render(pl, tracks)
+
+
+class TestFullPlayNeedsTheLibrary:
+    """AppleScript only sees what the library holds. A candidate track being
+    considered for adding is invisible to it — verified against Music.app —
+    so the page must not offer a button that cannot work."""
+
+    def _tracks(self):
+        from aimc.providers.base import Song
+        return [PlaylistTrack(song=Song(
+            catalog_id="1", artist="A", title="T",
+            url="https://music.apple.com/pt/album/x/1?i=2",
+            preview_url="https://audio-ssl.itunes.apple.com/x.m4a"), entry_id="e1")]
+
+    def test_library_track_gets_the_button(self):
+        from aimc.htmlview import render
+        from aimc.providers.base import Playlist
+        out = render(Playlist(id="p", name="Mine", editable=True),
+                     self._tracks(), in_library=True)
+        assert 'class="app"' in out
+
+    def test_candidate_gets_preview_only(self):
+        from aimc.htmlview import render
+        from aimc.providers.base import Playlist
+        out = render(Playlist(id="p", name="Candidates", editable=True),
+                     self._tracks(), in_library=False)
+        assert 'class="app"' not in out
+        assert 'class="play"' in out     # the preview still works
