@@ -145,3 +145,68 @@ class TestAudit:
             PlaylistTrack(song=song("2", artist="B", title="Two", isrc="X2")),
         ]
         assert audit(tracks) == []
+
+
+class TestMergeAndDedupe:
+    """Two Shazam playlists in a real library overlapped by 27 of 32 tracks —
+    one made when the interface was in English, one in Ukrainian."""
+
+    def _two(self, lib):
+        p = lib.provider
+        p.data["p3"] = Playlist(id="p3", name="Other", editable=True)
+        p.tracks["p3"] = [
+            PlaylistTrack(song=song("1", isrc="SAME1"), entry_id="x1"),
+            PlaylistTrack(song=song("9", isrc="ONLY9"), entry_id="x2"),
+        ]
+        p.tracks["p1"] = [
+            PlaylistTrack(song=song("1", isrc="SAME1"), entry_id="e1"),
+            PlaylistTrack(song=song("2", isrc="ONLY2"), entry_id="e2"),
+        ]
+        return lib
+
+    def test_plan_separates_new_from_shared(self, lib):
+        plan = self._two(lib).plan_merge("Other", "Mine")
+        assert [t.song.isrc for t in plan.to_add] == ["ONLY9"]
+        assert [t.song.isrc for t in plan.already_there] == ["SAME1"]
+
+    def test_plan_writes_nothing(self, lib):
+        lib = self._two(lib)
+        before = len(lib.tracks("Mine")[1])
+        lib.plan_merge("Other", "Mine")
+        assert len(lib.tracks("Mine")[1]) == before
+        assert lib.history("Mine") == []
+
+    def test_apply_adds_only_the_missing(self, lib):
+        lib = self._two(lib)
+        lib.apply_merge(lib.plan_merge("Other", "Mine"))
+        assert len(lib.tracks("Mine")[1]) == 3
+
+    def test_merging_into_itself_is_refused(self, lib):
+        with pytest.raises(ValueError):
+            lib.plan_merge("Mine", "Mine")
+
+    def test_identity_uses_isrc_across_catalog_ids(self, lib):
+        """Same recording, two catalog ids — must not be added twice."""
+        p = lib.provider
+        p.data["p3"] = Playlist(id="p3", name="Other", editable=True)
+        p.tracks["p3"] = [PlaylistTrack(song=song("777", isrc="SAME1"), entry_id="x1")]
+        p.tracks["p1"] = [PlaylistTrack(song=song("111", isrc="SAME1"), entry_id="e1")]
+        assert lib.plan_merge("Other", "Mine").to_add == []
+
+    def test_dedupe_keeps_the_first(self, lib):
+        lib.provider.tracks["p1"] = [
+            PlaylistTrack(song=song("1", isrc="D"), entry_id="e1"),
+            PlaylistTrack(song=song("2", isrc="D"), entry_id="e2"),
+            PlaylistTrack(song=song("3", isrc="E"), entry_id="e3"),
+        ]
+        removed = lib.dedupe("Mine")
+        assert [t.entry_id for t in removed] == ["e2"]
+        assert [t.entry_id for t in lib.tracks("Mine")[1]] == ["e1", "e3"]
+
+    def test_dedupe_snapshots_first(self, lib):
+        lib.provider.tracks["p1"] = [
+            PlaylistTrack(song=song("1", isrc="D"), entry_id="e1"),
+            PlaylistTrack(song=song("2", isrc="D"), entry_id="e2"),
+        ]
+        lib.dedupe("Mine")
+        assert len(snapshots.load(lib.history("Mine")[0])["tracks"]) == 2

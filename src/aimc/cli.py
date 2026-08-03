@@ -202,6 +202,69 @@ def cmd_create(
     typer.secho(f"created {name!r} ({pid})", fg=typer.colors.GREEN)
 
 
+@app.command("merge")
+def cmd_merge(
+    source: str,
+    target: str,
+    dedupe: bool = typer.Option(True, help="Also drop repeats already in the target."),
+    yes: bool = typer.Option(False, "--yes", help="Required. Without it, this is a dry run."),
+) -> None:
+    """Fold one playlist into another. Prints the plan; --yes carries it out."""
+    lib = _lib()
+    try:
+        plan = lib.plan_merge(source, target, dedupe=dedupe)
+    except (PlaylistNotFound, ValueError) as e:
+        _die(str(e))
+
+    typer.echo(f"{plan.source.name} -> {plan.target.name}\n")
+    typer.echo(f"already in {plan.target.name}: {len(plan.already_there)}")
+    typer.echo(f"to add: {len(plan.to_add)}")
+    for t in plan.to_add:
+        typer.echo(f"  + {t.song.artist} — {t.song.title}")
+    if plan.duplicates:
+        typer.echo(f"\nrepeats to drop from {plan.target.name}: {len(plan.duplicates)}")
+        for t in plan.duplicates:
+            typer.echo(f"  - {t.song.artist} — {t.song.title}")
+
+    if plan.empty:
+        typer.secho("\nnothing to do", fg=typer.colors.GREEN)
+        return
+    if not yes:
+        typer.secho("\ndry run — pass --yes to carry this out", fg=typer.colors.YELLOW)
+        return
+    try:
+        lib.apply_merge(plan)
+    except NotEditable as e:
+        _die(str(e))
+    typer.secho("merged", fg=typer.colors.GREEN)
+
+
+@app.command("dedupe")
+def cmd_dedupe(
+    playlist: str,
+    yes: bool = typer.Option(False, "--yes", help="Required. Without it, this is a dry run."),
+) -> None:
+    """Drop repeated recordings, keeping the first of each."""
+    lib = _lib()
+    try:
+        dupes = lib.duplicate_entries(playlist)
+    except PlaylistNotFound as e:
+        _die(str(e))
+    if not dupes:
+        typer.secho("no repeats", fg=typer.colors.GREEN)
+        return
+    for t in dupes:
+        typer.echo(f"  - {t.song.artist} — {t.song.title}")
+    if not yes:
+        typer.secho(f"\n{len(dupes)} repeat(s) — pass --yes to remove", fg=typer.colors.YELLOW)
+        return
+    try:
+        lib.dedupe(playlist)
+    except NotEditable as e:
+        _die(str(e))
+    typer.secho(f"removed {len(dupes)}", fg=typer.colors.GREEN)
+
+
 @app.command("restore")
 def cmd_restore(
     playlist: str,

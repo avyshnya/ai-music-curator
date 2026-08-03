@@ -8,10 +8,37 @@ a playlist it cannot restore has no business being pointed at someone's music.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import snapshots
 from .providers.base import Playlist, PlaylistTrack
+
+
+def identity(track) -> str:
+    """What makes two entries the same recording.
+
+    The ISRC when there is one — it is the same code whichever release or
+    region serves the track, so it catches a song that appears twice under
+    different catalog ids. Only when there is no ISRC does the catalog id have
+    to stand in, and then only within one service.
+    """
+    return track.song.isrc or f"cid:{track.song.catalog_id}"
+
+
+@dataclass
+class MergePlan:
+    """What merging one playlist into another would do. Nothing is written."""
+
+    source: Playlist
+    target: Playlist
+    to_add: list = field(default_factory=list)       # PlaylistTrack, source only
+    already_there: list = field(default_factory=list)  # PlaylistTrack, in both
+    duplicates: list = field(default_factory=list)   # PlaylistTrack entries to drop
+
+    @property
+    def empty(self) -> bool:
+        return not self.to_add and not self.duplicates
 
 
 class PlaylistNotFound(LookupError):
@@ -119,6 +146,57 @@ class Library:
             self.provider.add_songs(p.id, wanted)
         self._after(p, "restore")
         return p
+
+    # --- merge and dedupe ---------------------------------------------------
+
+    def duplicate_entries(self, name_or_id: str) -> list[PlaylistTrack]:
+        """Entries that repeat a recording already present. First one wins."""
+        _, tracks = self.tracks(name_or_id)
+        seen, dupes = set(), []
+        for t in tracks:
+            k = identity(t)
+            if k in seen:
+                dupes.append(t)
+            else:
+                seen.add(k)
+        return dupes
+
+    def plan_merge(self, source: str, target: str, dedupe: bool = True) -> MergePlan:
+        """Work out a merge without touching anything."""
+        src, src_tracks = self.tracks(source)
+        tgt, tgt_tracks = self.tracks(target)
+        if src.id == tgt.id:
+            raise ValueError("source and target are the same playlist")
+
+        have = {identity(t) for t in tgt_tracks}
+        plan = MergePlan(source=src, target=tgt)
+        for t in src_tracks:
+            k = identity(t)
+            if k in have:
+                plan.already_there.append(t)
+            else:
+                plan.to_add.append(t)
+                have.add(k)  # a source that repeats itself must not add twice
+
+        if dedupe:
+            plan.duplicates = self.duplicate_entries(target)
+        return plan
+
+    def apply_merge(self, plan: MergePlan) -> None:
+        """Carry out a plan. Snapshots the target first, as every write does."""
+        if plan.empty:
+            return
+        if plan.duplicates:
+            self.remove(plan.target.id, [t.entry_id for t in plan.duplicates if t.entry_id])
+        if plan.to_add:
+            self.add(plan.target.id, [t.song.catalog_id for t in plan.to_add])
+
+    def dedupe(self, name_or_id: str) -> list[PlaylistTrack]:
+        """Drop repeated recordings, keeping the first of each."""
+        dupes = self.duplicate_entries(name_or_id)
+        if dupes:
+            self.remove(name_or_id, [t.entry_id for t in dupes if t.entry_id])
+        return dupes
 
     def _after(self, p: Playlist, reason: str) -> None:
         try:
