@@ -253,7 +253,10 @@ class TestHtmlView:
         # The track's own page, not the album it happens to sit on: the album
         # form leaves the track unselected when the app opens.
         assert "music://music.apple.com/pt/song/1" in out
-        assert "https://music.apple.com" not in out  # scheme rewritten, no browser link
+        # The full-play button keeps the real https URL: it is handed to the
+        # local server, which drives Music.app. Nothing here navigates a
+        # browser to music.apple.com.
+        assert 'href="https://music.apple.com' not in out
         assert "Mix" in out and "1990" in out
 
     def test_preview_becomes_a_play_button(self):
@@ -279,3 +282,33 @@ class TestHtmlView:
         assert '<span class="t"><script>' not in out
         assert "&lt;script&gt;" in out
         assert "A &amp; B" in out
+
+
+class TestFullPlayButton:
+    """A second, distinct control: the preview plays in the page, this one
+    hands the track to the Music app."""
+
+    def test_button_asks_by_name_not_url(self):
+        from aimc.htmlview import render
+        from aimc.providers.base import Playlist, Song
+        pl = Playlist(id="p1", name="Mix", editable=True)
+        tracks = [PlaylistTrack(song=Song(
+            catalog_id="1", artist="A", title="T",
+            url="https://music.apple.com/pt/album/x/1?i=2",
+            preview_url="https://audio-ssl.itunes.apple.com/x.m4a"), entry_id="e1")]
+        out = render(pl, tracks)
+        assert 'class="app"' in out
+        # The server is asked by name, not by URL: opening a track URL and
+        # then sending play resumes the old queue and starts the wrong song.
+        # The music:// address stays only as the no-server fallback.
+        assert 'data-title="T"' in out and 'data-artist="A"' in out
+        assert 'data-app="music://music.apple.com/pt/song/1"' in out
+        assert "'/play'" in out
+
+    def test_no_button_without_a_url(self):
+        from aimc.htmlview import render
+        from aimc.providers.base import Playlist, Song
+        pl = Playlist(id="p1", name="Mix", editable=True)
+        tracks = [PlaylistTrack(song=Song(catalog_id="1", artist="A", title="T"),
+                                entry_id="e1")]
+        assert 'class="app"' not in render(pl, tracks)

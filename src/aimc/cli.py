@@ -320,7 +320,7 @@ def cmd_play(
     number: int = typer.Argument(..., help="Номер треку зі списку show."),
 ) -> None:
     """Play one track of a playlist in the Music app (macOS)."""
-    from .nowplaying import NotSupported, play_in_app
+    from .nowplaying import NotSupported, play_track
     try:
         p, tracks = _lib().tracks(playlist)
     except PlaylistNotFound as e:
@@ -328,13 +328,11 @@ def cmd_play(
     if not 1 <= number <= len(tracks):
         _die(f"у {p.name!r} треків {len(tracks)}, а просять #{number}")
     s = tracks[number - 1].song
-    if not s.url:
-        _die("у цього треку немає посилання")
     try:
-        ok, msg = play_in_app(s.url)
+        ok, msg = play_track(p.name, s.title, s.artist)
     except NotSupported as e:
         _die(str(e))
-    typer.secho(f"{'▶' if ok else '×'} {s.artist} — {s.title}",
+    typer.secho(f"{'▶' if ok else '×'} {msg}",
                 fg=typer.colors.GREEN if ok else typer.colors.RED)
 
 

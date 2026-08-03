@@ -25,41 +25,45 @@ def _osa(script: str) -> tuple[bool, str]:
     return r.returncode == 0, (r.stdout or r.stderr).strip()
 
 
-def play_in_app(url: str) -> tuple[bool, str]:
-    """Open a track URL in Music.app and press play.
+def _esc(s: str) -> str:
+    return s.replace("\\", "\\\\").replace('"', '\\"')
 
-    `open` hands the URL to the app, which navigates to it. Playback then has
-    to be triggered separately — the app selects but does not start. A short
-    wait between the two is not optional: without it the play command lands
-    before the app has finished navigating and starts whatever was queued
-    before.
+
+def play_track(playlist: str, title: str, artist: str = "") -> tuple[bool, str]:
+    """Play one track of a playlist in Music.app, by name.
+
+    Opening the track's URL and then sending `play` does NOT work and looks
+    like it should: `open` moves the app's view, but `play` resumes whatever
+    was already queued, so the wrong song starts. Verified — asking for
+    "Filha de Lisboa" played "A Melhor Saída", and a longer delay changed
+    nothing, because it is not a timing problem.
+
+    Addressing the track inside the playlist is what actually works, and it
+    works because these tracks are in the library: they are in a playlist.
     """
     if sys.platform != "darwin":
         raise NotSupported("Music.app існує лише на macOS")
-    subprocess.run(["open", "-a", "Music", url], check=False,
-                   capture_output=True, timeout=20)
-    ok, out = _osa('delay 1.2\ntell application "Music" to play')
-    return ok, out or "grає"
-
-
-def play_library_track(title: str, artist: str) -> tuple[bool, str]:
-    """Play a track that is already in the library, found by title and artist.
-
-    Reliable only for library tracks: AppleScript searches the local library,
-    so a catalog-only track will not be found this way.
-    """
-    esc = lambda s: s.replace('"', '\\"')  # noqa: E731
+    cond = f'name is "{_esc(title)}"'
+    if artist:
+        cond += f' and artist is "{_esc(artist)}"'
     script = f'''
     tell application "Music"
-      set hits to (every track of library playlist 1 whose name is "{esc(title)}" ¬
-                   and artist is "{esc(artist)}")
-      if (count of hits) is 0 then return "NOTFOUND"
-      play item 1 of hits
-      return "OK"
+      try
+        set pl to first user playlist whose name is "{_esc(playlist)}"
+        set hits to (every track of pl whose {cond})
+        if (count of hits) is 0 then return "NOTFOUND"
+        play item 1 of hits
+        delay 0.6
+        return (name of current track) & " — " & (artist of current track)
+      on error e
+        return "ERR: " & e
+      end try
     end tell'''
     ok, out = _osa(script)
     if out == "NOTFOUND":
-        return False, "треку немає в бібліотеці"
+        return False, "треку немає в цьому плейлісті"
+    if out.startswith("ERR:"):
+        return False, out
     return ok, out
 
 

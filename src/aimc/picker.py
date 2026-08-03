@@ -100,8 +100,24 @@ def choose(playlist: Playlist, tracks: list[PlaylistTrack], port: int = 8777) ->
 
         def do_POST(self):
             n = int(self.headers.get("Content-Length", 0))
+            raw = self.rfile.read(n)
+
+            # Start a full track in the Music app. Separate from the page's own
+            # 30-second preview, and separate from finishing the selection —
+            # listening must not end the picking session.
+            if self.path == "/play":
+                try:
+                    from .nowplaying import play_track
+                    d = json.loads(raw)
+                    ok, _ = play_track(playlist.name, d["title"], d.get("artist", ""))
+                except Exception:
+                    ok = False
+                self.send_response(200 if ok else 503)
+                self.end_headers()
+                return
+
             try:
-                result["keep"] = json.loads(self.rfile.read(n))["keep"]
+                result["keep"] = json.loads(raw)["keep"]
             except Exception:
                 result["keep"] = []
             self.send_response(204)

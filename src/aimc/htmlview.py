@@ -62,10 +62,19 @@ def _row(i: int, t: PlaylistTrack, pick: bool = False) -> str:
             f'data-art="{html.escape(art_src)}" aria-label="Слухати">&#9654;</button>'
         )
 
-    open_app = (
-        f'<a class="ext" href="{html.escape(href)}" title="Відкрити в Apple Music">&#8599;</a>'
-        if href else ""
-    )
+    # Full playback, as opposed to the 30-second preview next to it. When the
+    # page is served locally the button asks the server, which drives Music.app
+    # over AppleScript and actually starts the song. Opened as a plain file
+    # there is no server, so it falls back to the link — which lands on the
+    # album, the best the URL scheme can do.
+    open_app = ""
+    if s.url:
+        open_app = (
+            f'<button class="app" data-title="{title}" '
+            f'data-artist="{html.escape(s.artist)}" '
+            f'data-app="{html.escape(href)}" '
+            f'title="Слухати повністю в Apple Music">&#9834;</button>'
+        )
     body = f'<span class="body"><span class="t">{title}</span><span class="a">{sub}</span></span>'
     cb = f'<input type="checkbox" class="cb" checked data-l="{label}">' if pick else ""
     return (
@@ -212,8 +221,11 @@ def render(playlist: Playlist, tracks: list[PlaylistTrack], pick: bool = False) 
   .play {{ flex:0 0 auto; width:34px; height:34px; border-radius:50%; border:0; cursor:pointer;
     background:#22c55e; color:#fff; font-size:13px; line-height:1; }}
   .play.on {{ background:#e11d48; }}
-  .ext {{ flex:0 0 auto; text-decoration:none; font-size:15px;
-    color:color-mix(in srgb,CanvasText 45%,Canvas); padding:0 4px; }}
+  .app {{ flex:0 0 auto; width:30px; height:30px; border-radius:50%; border:0;
+    cursor:pointer; font-size:14px; line-height:1;
+    background:color-mix(in srgb,#fa2b56 18%,Canvas); color:#fa2b56; }}
+  .app:hover {{ background:#fa2b56; color:#fff; }}
+  .app.busy {{ opacity:.5; }}
   .row.playing {{ background:color-mix(in srgb,#22c55e 12%,Canvas); }}
   /* One sticky stack at the bottom: the player sits above the confirm bar
      instead of underneath it. Two independently sticky elements overlapped. */
@@ -285,6 +297,17 @@ def render(playlist: Playlist, tracks: list[PlaylistTrack], pick: bool = False) 
     else {{ au.pause(); icon(mbtn,false); if(cur) icon(cur,false); }}
   }});
   document.addEventListener('click', function(e){{
+    var m=e.target.closest('.app');
+    if(m){{
+      m.classList.add('busy');
+      fetch('/play', {{method:'POST', body: JSON.stringify(
+        {{title:m.dataset.title, artist:m.dataset.artist}})}})
+        .then(function(r){{ if(!r.ok) throw 0; au.pause(); stopCur(); icon(mbtn,false);
+                            setTimeout(function(){{ m.classList.remove('busy'); }}, 1200); }})
+        .catch(function(){{ m.classList.remove('busy');
+                            if(m.dataset.app) location.href = m.dataset.app; }});
+      return;
+    }}
     var b=e.target.closest('.play'); if(!b) return;
     if(cur===b && !au.paused){{ au.pause(); icon(b,false); icon(mbtn,false); return; }}
     if(cur===b && au.paused){{ au.play(); icon(b,true); icon(mbtn,true); return; }}
