@@ -212,9 +212,15 @@ def has_variant_marker(*fields: str) -> list[str]:
             # signal that told us May J.'s track was a cover.
             hit = re.search(rf"\b{re.escape(needle)}(?:s|es)?\b", blob)
         else:
-            # Japanese does not put spaces between words, so word boundaries are
-            # meaningless here — a plain substring test is the correct one.
-            hit = needle in blob
+            # Japanese does not space its words, so \b is meaningless — but a
+            # bare substring test is wrong too. ドライブ ("drive") contains
+            # ライブ ("live"), and an album called ドライブが楽しくなる洋楽ヒッツ
+            # had a 1967 Motown single reported as a live recording.
+            #
+            # A katakana word starts where katakana starts. So the marker must
+            # not be preceded by another katakana character; a kanji, kana,
+            # space or punctuation before it means a real boundary.
+            hit = re.search(rf"(?<![゠-ヿ]){re.escape(needle)}", blob)
         if hit:
             found.append(m)
     return found

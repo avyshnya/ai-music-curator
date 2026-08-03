@@ -143,9 +143,14 @@ class TestJapaneseVariantMarkers:
     def test_plain_japanese_title_is_clean(self):
         assert has_variant_marker("夏をあきらめて", "めぐりあい") == []
 
-    def test_no_word_boundary_needed_in_japanese(self):
-        # Japanese does not space its words; a boundary test would miss this
-        assert "カラオケ" in has_variant_marker("初恋オリジナルカラオケ集")
+    def test_katakana_word_must_start_the_run(self):
+        """Found live: an album called ドライブが楽しくなる洋楽ヒッツ ("hits that
+        make driving fun") reported a 1967 Motown single as a live recording,
+        because ドライブ ("drive") contains ライブ ("live")."""
+        assert has_variant_marker("ドライブが楽しくなる洋楽ヒッツ!70年代 R&B") == []
+
+    def test_real_live_album_still_matches(self):
+        assert "ライブ" in has_variant_marker("武道館ライブ")
 
 
 class TestPortugueseVariantMarkers:
