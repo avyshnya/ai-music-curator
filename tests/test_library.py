@@ -363,5 +363,25 @@ class TestSilencing:
     def test_page_starts_silent(self):
         """Opening the page must not resume whatever the app was playing."""
         page = self._page()
-        before_listener = page.split("addEventListener('click'")[0]
-        assert "hushApp();" in before_listener
+        # The call sits on its own line right after the definition, so it runs
+        # when the script loads rather than inside any handler.
+        after_def = page.split("function hushApp()", 1)[1]
+        assert "\n  hushApp();" in after_def.split("addEventListener", 1)[0]
+
+
+class TestButtonsAreCentred:
+    """Round buttons must centre their glyph explicitly: left to the text
+    baseline the symbol sits low in the circle."""
+
+    def test_all_round_buttons_use_flex_centring(self):
+        from aimc.htmlview import render
+        from aimc.providers.base import Playlist, Song
+        tracks = [PlaylistTrack(song=Song(
+            catalog_id="1", artist="A", title="T",
+            url="https://music.apple.com/pt/album/x/1?i=2",
+            preview_url="https://audio-ssl.itunes.apple.com/x.m4a"), entry_id="e1")]
+        css = render(Playlist(id="p", name="Mine", editable=True), tracks)
+        for rule in (".play {", ".app {", "#mbtn {"):
+            block = css.split(rule, 1)[1].split("}", 1)[0]
+            assert "justify-content:center" in block, rule
+            assert "align-items:center" in block, rule

@@ -223,8 +223,13 @@ def render(playlist: Playlist, tracks: list[PlaylistTrack], pick: bool = False,
   .y {{ flex: 0 0 auto; font-variant-numeric: tabular-nums; font-size: 14px;
         color: color-mix(in srgb, CanvasText 45%, Canvas); }}
   .art {{ flex:0 0 auto; width:44px; height:44px; border-radius:6px; object-fit:cover; }}
-  .play {{ flex:0 0 auto; width:34px; height:34px; border-radius:50%; border:0; cursor:pointer;
-    background:#22c55e; color:#fff; font-size:13px; line-height:1; }}
+  /* Round buttons centre their glyph with flex. Left to the text baseline a
+     symbol sits low in the circle, and ▶ has uneven side bearings on top of
+     that, so it also drifts left. The 1px nudge cancels the bearing. */
+  .play {{ flex:0 0 auto; width:34px; height:34px; border-radius:50%; border:0;
+    cursor:pointer; background:#22c55e; color:#fff; font-size:14px; line-height:1;
+    padding:0; display:flex; align-items:center; justify-content:center; }}
+  .play::before {{ content:''; display:block; width:1px; }}
   .play.on {{ background:#e11d48; }}
   .app {{ flex:0 0 auto; width:38px; height:38px; border-radius:50%; border:0;
     cursor:pointer; font-size:28px; line-height:1; padding:0;
@@ -249,7 +254,8 @@ def render(playlist: Playlist, tracks: list[PlaylistTrack], pick: bool = False,
   #mt {{ display:block; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
   #ma {{ display:block; font-size:13px; color:color-mix(in srgb,CanvasText 55%,Canvas); }}
   #mbtn {{ width:40px; height:40px; border-radius:50%; border:0; cursor:pointer;
-    background:#22c55e; color:#fff; font-size:15px; }}
+    background:#22c55e; color:#fff; font-size:16px; line-height:1; padding:0;
+    display:flex; align-items:center; justify-content:center; }}
   #mbar {{ display:flex; align-items:center; gap:10px; margin-top:10px;
     font-size:12px; font-variant-numeric:tabular-nums;
     color:color-mix(in srgb,CanvasText 55%,Canvas); }}
@@ -289,6 +295,9 @@ def render(playlist: Playlist, tracks: list[PlaylistTrack], pick: bool = False,
   // starting a new preview, resuming a paused one, and the mini-player button.
   // Wiring it to only one of the three left the app playing underneath.
   function hushApp(){{ fetch('/pause', {{method:'POST'}}).catch(function(){{}}); }}
+  // Opening the page must not start anything: the app may still be playing
+  // from a previous visit, and a quiet screen that makes noise is wrong.
+  hushApp();
   function icon(b,p){{ b.innerHTML = p ? '\\u23F8' : '\\u25B6'; }}
   function stopCur(){{ if(cur){{ icon(cur,false); cur.closest('.row').classList.remove('playing'); }} }}
   au.addEventListener('timeupdate', function(){{
@@ -306,10 +315,6 @@ def render(playlist: Playlist, tracks: list[PlaylistTrack], pick: bool = False,
     if(au.paused){{ hushApp(); au.play(); icon(mbtn,true); if(cur) icon(cur,true); }}
     else {{ au.pause(); icon(mbtn,false); if(cur) icon(cur,false); }}
   }});
-  // Opening the page must not start anything. The app may still be playing
-  // from a previous visit, and arriving at a quiet screen that makes noise is
-  // simply wrong.
-  hushApp();
   document.addEventListener('click', function(e){{
     var m=e.target.closest('.app');
     if(m){{
