@@ -3,6 +3,10 @@
 Reading a list and reporting numbers by hand is not a workflow, it is a chore.
 This serves the same page over localhost, so the Done button can POST the
 selection back and the caller simply receives it.
+
+Everything that has to survive someone else's machine lives here: picking a
+port that is actually free, opening the real browser rather than whatever
+embedded viewer is registered, and refusing to treat a closed tab as an answer.
 """
 
 from __future__ import annotations
@@ -13,6 +17,7 @@ import subprocess
 import sys
 import threading
 import webbrowser
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from .htmlview import render
@@ -67,25 +72,28 @@ def open_in_browser(url: str) -> None:
         pass
 
 
-def choose(playlist: Playlist, tracks: list[PlaylistTrack], port: int = 8777,
-           in_library: bool = True) -> list[int]:
-    """Open the list in a browser and block until Done is pressed.
+def serve_once(
+    page: str,
+    *,
+    port: int = 0,
+    timeout: float | None = None,
+    routes: dict[str, Callable[[bytes], int]] | None = None,
+    announce: str = "Відкрий і познач",
+) -> dict | None:
+    """Serve one page, wait for it to POST /done, return what it sent.
 
-    Returns the indexes (0-based) of the tracks left checked. Ctrl-C, or closing
-    without pressing Done, leaves the caller with nothing — which is the safe
-    outcome, since no selection means no change.
+    Returns ``None`` when nothing was submitted — the tab was closed, or the
+    wait ran out. That is deliberately distinct from an empty answer: "I chose
+    nothing" and "I never answered" must not collapse into the same value, or a
+    closed tab starts reading as approval to delete everything.
+
+    ``port=0`` asks the OS for a free port. A fixed port is the kind of thing
+    that works on the machine it was written on and fails on the next one,
+    where 8777 already belongs to something else.
     """
-    page = render(playlist, tracks, pick=True, in_library=in_library)
-    # The note tells the reader to report numbers by hand; here the button does
-    # it for them, so swap that paragraph for the real control.
-    start = page.find('<div class="note">')
-    if start != -1:
-        end = page.find("</div>", start) + len("</div>")
-        page = page[:start] + _DONE_UI + page[end:]
-    page = page.replace("</body>", _DONE_JS + "</body>")
-
-    result: dict[str, list[int]] = {}
-    stop = threading.Event()
+    result: dict = {}
+    answered = threading.Event()
+    extra = routes or {}
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):  # keep the terminal quiet
@@ -101,45 +109,122 @@ def choose(playlist: Playlist, tracks: list[PlaylistTrack], port: int = 8777,
 
         def do_POST(self):
             n = int(self.headers.get("Content-Length", 0))
-            raw = self.rfile.read(n)
+            raw = self.rfile.read(n) if n else b""
 
-            # Start a full track in the Music app. Separate from the page's own
-            # 30-second preview, and separate from finishing the selection —
-            # listening must not end the picking session.
-            if self.path == "/pause":
+            handler = extra.get(self.path)
+            if handler is not None:
                 try:
-                    from .nowplaying import pause
-                    pause()
+                    code = handler(raw)
                 except Exception:
-                    pass
-                self.send_response(204)
-                self.end_headers()
-                return
-
-            if self.path == "/play":
-                try:
-                    from .nowplaying import play_track
-                    d = json.loads(raw)
-                    ok, _ = play_track(playlist.name, d["title"], d.get("artist", ""))
-                except Exception:
-                    ok = False
-                self.send_response(200 if ok else 503)
+                    code = 503
+                self.send_response(code)
                 self.end_headers()
                 return
 
             try:
-                result["keep"] = json.loads(raw)["keep"]
+                result.update(json.loads(raw))
             except Exception:
-                result["keep"] = []
+                pass
             self.send_response(204)
             self.end_headers()
-            stop.set()
+            answered.set()
 
-    srv = HTTPServer(("127.0.0.1", port), Handler)
+    try:
+        srv = HTTPServer(("127.0.0.1", port), Handler)
+    except OSError as e:
+        print(f"не вдалося зайняти порт {port}: {e}", file=sys.stderr)
+        return None
+
     threading.Thread(target=srv.serve_forever, daemon=True).start()
-    url = f"http://127.0.0.1:{port}/"
-    print(f"Відкрий і познач: {url}")
+    url = f"http://127.0.0.1:{srv.server_port}/"
+    # Printed as well as opened. When the browser cannot be launched — a remote
+    # session, a locked-down desktop — the URL on screen is the whole fallback.
+    print(f"{announce}: {url}", flush=True)
     open_in_browser(url)
-    stop.wait()
-    srv.shutdown()
-    return result.get("keep", [])
+    try:
+        answered.wait(timeout)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+    if not answered.is_set():
+        return None
+    return result
+
+
+def choose(playlist: Playlist, tracks: list[PlaylistTrack], port: int = 0,
+           in_library: bool = True, timeout: float | None = None) -> list[int] | None:
+    """Open the list in a browser and block until Done is pressed.
+
+    Returns the indexes (0-based) of the tracks left checked, or ``None`` if
+    the page was closed without an answer — which is the safe outcome, since no
+    answer means no change.
+    """
+    page = render(playlist, tracks, pick=True, in_library=in_library)
+    # The note tells the reader to report numbers by hand; here the button does
+    # it for them, so swap that paragraph for the real control.
+    start = page.find('<div class="note">')
+    if start != -1:
+        end = page.find("</div>", start) + len("</div>")
+        page = page[:start] + _DONE_UI + page[end:]
+    page = page.replace("</body>", _DONE_JS + "</body>")
+
+    # Start a full track in the Music app. Separate from the page's own
+    # 30-second preview, and separate from finishing the selection —
+    # listening must not end the picking session.
+    def _pause(_raw: bytes) -> int:
+        from .nowplaying import pause
+        pause()
+        return 204
+
+    def _play(raw: bytes) -> int:
+        from .nowplaying import play_track
+        d = json.loads(raw)
+        ok, _ = play_track(playlist.name, d["title"], d.get("artist", ""))
+        return 200 if ok else 503
+
+    answer = serve_once(
+        page,
+        port=port,
+        timeout=timeout,
+        routes={"/play": _play, "/pause": _pause},
+    )
+    if answer is None:
+        return None
+    keep = answer.get("keep")
+    if not isinstance(keep, list):
+        return None
+    return [i for i in keep if isinstance(i, int) and 0 <= i < len(tracks)]
+
+
+def selection(tracks: list[PlaylistTrack], kept: list[int]) -> dict:
+    """Turn a set of kept indexes into something the next command can consume.
+
+    The two lists that matter are not the same shape: adding takes catalog ids,
+    removing takes entry ids. Working them out here means the caller never has
+    to, and never gets them the wrong way round.
+    """
+    keep = set(kept)
+
+    def entry(i: int, t: PlaylistTrack) -> dict:
+        from .text import recording_year
+        s = t.song
+        return {
+            "n": i + 1,
+            "catalog_id": s.catalog_id,
+            "entry_id": t.entry_id,
+            "artist": s.artist,
+            "title": s.title,
+            "year": recording_year(s.isrc, s.release_date),
+        }
+
+    kept_rows = [entry(i, t) for i, t in enumerate(tracks) if i in keep]
+    dropped_rows = [entry(i, t) for i, t in enumerate(tracks) if i not in keep]
+    return {
+        "kept": kept_rows,
+        "dropped": dropped_rows,
+        "kept_catalog_ids": [r["catalog_id"] for r in kept_rows if r["catalog_id"]],
+        "dropped_entry_ids": [r["entry_id"] for r in dropped_rows if r["entry_id"]],
+    }

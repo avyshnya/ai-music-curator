@@ -7,6 +7,7 @@ refuses to run without --yes.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from .audit import audit as run_audit
 from .library import Library, NotEditable, PlaylistNotFound
 from .match import Query, best_matches
 from .providers.apple import AppleMusic
+from .providers.base import Playlist, PlaylistTrack
 from .text import recording_year
 
 app = typer.Typer(
@@ -53,6 +55,37 @@ def _preview(playlist, tracks, sample: int = 6) -> None:
     first_url = next((t.song.url for t in tracks if t.song.url), None)
     if first_url:
         typer.echo(f"  open: {first_url}")
+
+
+def _parse_line(line: str) -> tuple[str, str] | None:
+    """Split 'Artist — Title'. Any of four dashes, because sources vary."""
+    for sep in (" — ", " – ", " - ", " | "):
+        if sep in line:
+            artist, title = (x.strip() for x in line.split(sep, 1))
+            return artist, title
+    return None
+
+
+def _resolve_lines(raw: str, window):
+    """Match each line against the catalog.
+
+    Yields ``(line, parsed, match)`` where ``parsed`` is None when the line was
+    not readable at all and ``match`` is None when nothing was found — two
+    different failures that deserve two different messages.
+
+    Shared by `resolve` and `pick` on purpose: two commands that answer "what
+    does this list mean" must not be able to answer it differently.
+    """
+    am = AppleMusic()
+    for line in [ln.strip() for ln in raw.splitlines() if ln.strip()]:
+        parsed = _parse_line(line)
+        if parsed is None:
+            yield line, None, None
+            continue
+        artist, title = parsed
+        hits = am.search_songs(f"{artist} {title}", limit=15)
+        top = best_matches(hits, Query(artist=artist, title=title, era=window), limit=1)
+        yield line, parsed, (top[0] if top else None)
 
 
 def _era(era: str | None) -> tuple[int, int] | None:
@@ -104,6 +137,133 @@ def cmd_show(
         typer.echo(line)
         if links and s.url:
             typer.echo(f"     {s.url}")
+
+
+@app.command("pick")
+def cmd_pick(
+    playlist: str = typer.Option(None, "--playlist", help="A playlist already in the library."),
+    source: Path = typer.Option(
+        None, "--from", help="File of 'Artist — Title' lines, or - for stdin."
+    ),
+    ids: str = typer.Option(None, "--ids", help="Comma-separated catalog ids."),
+    era: str = typer.Option(None, help="Expected recording years, e.g. 1970-1989."),
+    title: str = typer.Option("", "--title", help="Heading, for a list that is not a playlist."),
+    description: str = typer.Option("", "--description", help="Sub-heading for that list."),
+    out: Path = typer.Option(None, "--out", help="Write the answer here as JSON."),
+    port: int = typer.Option(0, help="0 asks the OS for a free port."),
+    timeout: float = typer.Option(
+        900, help="Seconds to wait for the Done button. 0 waits indefinitely."
+    ),
+) -> None:
+    """Put a list of songs in front of a person and return what they kept.
+
+    This is how a tracklist gets shown — any tracklist, whether it is already a
+    playlist or a set of candidates that does not exist yet. A list printed to a
+    terminal cannot be listened to, and a list retyped into chat as numbers is a
+    transcription error waiting to happen.
+
+    Writes nothing. It reports a decision; carrying it out is another command.
+    """
+    from .picker import choose, selection
+
+    given = [bool(playlist), source is not None, bool(ids)]
+    if sum(given) != 1:
+        _die("вибери рівно одне джерело: --playlist, --from або --ids")
+
+    window = _era(era)
+    in_library = False
+    unresolved: list[str] = []
+
+    if playlist:
+        try:
+            pl, tracks = _lib().tracks(playlist)
+        except PlaylistNotFound as e:
+            _die(str(e))
+        in_library = True
+    else:
+        am = AppleMusic()
+        songs = []
+        if ids:
+            for cid in [c.strip() for c in ids.split(",") if c.strip()]:
+                song = am.get_song(cid)
+                if song is None:
+                    unresolved.append(cid)
+                    continue
+                songs.append(song)
+        else:
+            raw = sys.stdin.read() if str(source) == "-" else Path(source).read_text()
+            for line, _parsed, match in _resolve_lines(raw, window):
+                if match is None:
+                    unresolved.append(line)
+                    continue
+                songs.append(match.song)
+        if not songs:
+            _die("нема чого показувати — жоден рядок не знайшовся в каталозі")
+        tracks = [PlaylistTrack(song=s) for s in songs]
+        pl = Playlist(id="proposal", name=title or "Обери треки", description=description)
+
+    for u in unresolved:
+        typer.secho(f"—  не знайдено: {u}", fg=typer.colors.YELLOW, err=True)
+
+    kept = choose(pl, tracks, port=port, in_library=in_library,
+                  timeout=timeout if timeout > 0 else None)
+    if kept is None:
+        # A closed tab is not a small answer, it is no answer. Saying so and
+        # exiting non-zero keeps it from being read as "keep everything".
+        typer.secho("відповіді не було — вікно закрили або вийшов час; нічого не змінено",
+                    fg=typer.colors.YELLOW, err=True)
+        raise typer.Exit(2)
+
+    payload = selection(tracks, kept)
+    payload["source"] = "playlist" if in_library else "list"
+    payload["playlist"] = pl.name if in_library else None
+    payload["unresolved"] = unresolved
+
+    text = json.dumps(payload, ensure_ascii=False, indent=2)
+    if out is not None:
+        Path(out).write_text(text, encoding="utf-8")
+        typer.echo(str(out))
+    else:
+        typer.echo(text)
+    typer.secho(f"лишили {len(payload['kept'])} · прибрали {len(payload['dropped'])}",
+                fg=typer.colors.GREEN, err=True)
+
+
+@app.command("name")
+def cmd_name(
+    names: str = typer.Option(..., "--names", help="Suggested names, separated by |."),
+    descriptions: str = typer.Option("", "--descriptions", help="Suggested descriptions, by |."),
+    count: int = typer.Option(0, help="How many tracks are waiting, shown as context."),
+    out: Path = typer.Option(None, "--out", help="Write the answer here as JSON."),
+    port: int = typer.Option(0, help="0 asks the OS for a free port."),
+    timeout: float = typer.Option(900, help="Seconds to wait. 0 waits indefinitely."),
+) -> None:
+    """Ask, in the browser, what a new playlist should be called.
+
+    The name is part of the result, so it is chosen in the same place as the
+    tracks rather than negotiated in chat afterwards.
+    """
+    from .naming import choose as choose_name
+
+    opts = [n.strip() for n in names.split("|") if n.strip()]
+    descs = [d.strip() for d in descriptions.split("|") if d.strip()]
+    if not opts:
+        _die("--names порожній")
+
+    answer = choose_name(opts, descs, count, port=port,
+                         timeout=timeout if timeout > 0 else None)
+    if answer is None:
+        typer.secho("назви не обрано — вікно закрили або вийшов час; нічого не створено",
+                    fg=typer.colors.YELLOW, err=True)
+        raise typer.Exit(2)
+
+    chosen, desc = answer
+    text = json.dumps({"name": chosen, "description": desc}, ensure_ascii=False, indent=2)
+    if out is not None:
+        Path(out).write_text(text, encoding="utf-8")
+        typer.echo(str(out))
+    else:
+        typer.echo(text)
 
 
 @app.command("stats")
@@ -254,23 +414,16 @@ def cmd_resolve(
     """Match a text list against the catalog. Writes nothing."""
     raw = sys.stdin.read() if str(source) == "-" else Path(source).read_text()
     window = _era(era)
-    am = AppleMusic()
     found = missing = 0
-    for line in [ln.strip() for ln in raw.splitlines() if ln.strip()]:
-        for sep in (" — ", " – ", " - ", " | "):
-            if sep in line:
-                artist, title = (x.strip() for x in line.split(sep, 1))
-                break
-        else:
+    for line, parsed, m in _resolve_lines(raw, window):
+        if parsed is None:
             typer.secho(f"?  cannot read: {line}", fg=typer.colors.YELLOW)
             continue
-        hits = am.search_songs(f"{artist} {title}", limit=15)
-        top = best_matches(hits, Query(artist=artist, title=title, era=window), limit=1)
-        if not top:
+        if m is None:
             missing += 1
+            artist, title = parsed
             typer.secho(f"—  {artist} — {title}: not found", fg=typer.colors.RED)
             continue
-        m = top[0]
         found += 1
         colour = typer.colors.GREEN if m.confidence == "high" else typer.colors.YELLOW
         typer.secho(f"{m.confidence:>6}  {m.song.artist} — {m.song.title}", fg=colour)
