@@ -15,7 +15,25 @@ from .text import recording_year
 _APP = "music://music.apple.com"
 
 
-def _row(i: int, t: PlaylistTrack) -> str:
+def _link(song) -> str:
+    """Deep link that lands on the TRACK, not on the album it sits in.
+
+    Apple's own `attributes.url` is the album page with the track as a query
+    parameter (`/album/<slug>/<albumId>?i=<trackId>`). Handing that to the app
+    opens the album and leaves the track unselected. The `/song/<trackId>`
+    form resolves to the track's own page, which is what a listener asked for.
+    """
+    if not song.catalog_id:
+        return ""
+    store = "us"
+    if song.url:
+        parts = song.url.split("/")
+        if len(parts) > 3 and len(parts[3]) == 2:
+            store = parts[3]
+    return f"{_APP}/{store}/song/{song.catalog_id}"
+
+
+def _row(i: int, t: PlaylistTrack, pick: bool = False) -> str:
     s = t.song
     year = recording_year(s.isrc, s.release_date) or ""
     title = html.escape(s.title)
@@ -24,19 +42,21 @@ def _row(i: int, t: PlaylistTrack) -> str:
     sub = html.escape(s.artist)
     if s.album:
         sub += " · " + html.escape(s.album)
-    artist = sub
-    # music.apple.com links deep-link to the app via the music:// scheme; a plain
-    # https link opens a browser tab instead, which is what we are avoiding.
-    href = s.url.replace("https://music.apple.com", _APP) if s.url else ""
-    inner = (
-        f'<span class="n">{i}</span>'
-        f'<span class="body"><span class="t">{title}</span>'
-        f'<span class="a">{artist}</span></span>'
-        f'<span class="y">{year}</span>'
+    href = _link(s)
+    label = html.escape(f"{s.artist} — {s.title}")
+
+    body_inner = f'<span class="t">{title}</span><span class="a">{sub}</span>'
+    body = (
+        f'<a class="body" href="{html.escape(href)}">{body_inner}<span class="p">&#9654;</span></a>'
+        if href else f'<span class="body">{body_inner}</span>'
     )
-    if href:
-        return f'<a class="row" href="{html.escape(href)}">{inner}<span class="p">&#9654;</span></a>'
-    return f'<div class="row">{inner}</div>'
+    # In pick mode a checkbox (checked = keep) sits on the left; tapping the title
+    # still opens the app, so choosing and auditioning happen on one screen.
+    cb = f'<input type="checkbox" class="cb" checked data-l="{label}">' if pick else ""
+    return (
+        f'<div class="row">{cb}<span class="n">{i}</span>{body}'
+        f'<span class="y">{year}</span></div>'
+    )
 
 
 def _page(title: str, body: str) -> str:
@@ -75,7 +95,7 @@ def _page(title: str, body: str) -> str:
   .bar .k {{ flex:0 0 88px; }}
   .bar .track {{ flex:1 1 auto; height:10px; border-radius:5px;
     background:color-mix(in srgb,CanvasText 10%,Canvas); overflow:hidden; }}
-  .bar .fill {{ height:100%; background:#fa2b56; border-radius:5px; }}
+  .bar .fill {{ height:100%; background:#22c55e; border-radius:5px; }}
   .bar .v {{ flex:0 0 auto; font-variant-numeric:tabular-nums;
     color:color-mix(in srgb,CanvasText 55%,Canvas); }}
 </style></head>
@@ -120,10 +140,29 @@ def render_stats(playlist: Playlist, stats) -> str:
     return _page(playlist.name, body)
 
 
-def render(playlist: Playlist, tracks: list[PlaylistTrack]) -> str:
-    rows = "\n".join(_row(i, t) for i, t in enumerate(tracks, 1))
+def render(playlist: Playlist, tracks: list[PlaylistTrack], pick: bool = False) -> str:
+    rows = "\n".join(_row(i, t, pick) for i, t in enumerate(tracks, 1))
     name = html.escape(playlist.name)
     desc = html.escape(playlist.description or "")
+    hint = "тап по назві відкриває Apple Music"
+    if pick:
+        hint = "познач що лишити · тап по назві слухає в Apple Music"
+    # Everything below is CSS only, no JavaScript. These pages are usually
+    # opened in a file preview on a phone, where scripts do not run — a button
+    # that needs JS is simply dead, which is exactly what happened.
+    pick_css = """
+  .cb { flex:0 0 auto; width:24px; height:24px; accent-color:#22c55e; }
+  .row:has(.cb:not(:checked)) { opacity:.45; }
+  .row:has(.cb:not(:checked)) .t { text-decoration:line-through; }
+  .note { margin-top:20px; padding:14px; border-radius:12px;
+    background:color-mix(in srgb,CanvasText 8%,Canvas); font-size:14px; }""" if pick else ""
+    footer = ""
+    script = ""
+    if pick:
+        footer = (
+            '<div class="note">Зніми галочку з того, що прибрати — рядок згасне '
+            'і буде закреслений. Потім просто назви мені <b>номери</b> знятих.</div>'
+        )
     return f"""<!doctype html>
 <html lang="uk"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -142,22 +181,21 @@ def render(playlist: Playlist, tracks: list[PlaylistTrack]) -> str:
   .row {{
     display: flex; align-items: center; gap: 12px;
     padding: 11px 8px; border-bottom: 1px solid color-mix(in srgb, CanvasText 12%, Canvas);
-    text-decoration: none; color: inherit;
   }}
-  a.row:active {{ background: color-mix(in srgb, CanvasText 8%, Canvas); }}
-  @media (hover: hover) {{ a.row:hover {{ background: color-mix(in srgb, CanvasText 6%, Canvas); }} }}
-  .n {{ flex: 0 0 28px; text-align: right; font-variant-numeric: tabular-nums;
+  .body {{ flex: 1 1 auto; min-width: 0; display:flex; flex-direction:column;
+    text-decoration: none; color: inherit; }}
+  a.body:active {{ opacity:.6; }}
+  .n {{ flex: 0 0 26px; text-align: right; font-variant-numeric: tabular-nums;
         color: color-mix(in srgb, CanvasText 45%, Canvas); font-size: 14px; }}
-  .body {{ flex: 1 1 auto; min-width: 0; }}
   .t {{ display: block; font-size: 16px; }}
   .a {{ display: block; font-size: 14px; color: color-mix(in srgb, CanvasText 55%, Canvas); }}
   .y {{ flex: 0 0 auto; font-variant-numeric: tabular-nums; font-size: 14px;
         color: color-mix(in srgb, CanvasText 45%, Canvas); }}
-  .p {{ flex: 0 0 auto; font-size: 15px; color: color-mix(in srgb, CanvasText 40%, Canvas); }}
-  a.row .p {{ color: #fa2b56; }}
+  .p {{ font-size: 14px; color: #22c55e; }}{pick_css}
 </style></head>
 <body><div class="wrap">
 <h1>{name}</h1>
-<div class="meta">{len(tracks)} треків{(" · " + desc) if desc else ""} · тап відкриває Apple Music</div>
+<div class="meta">{len(tracks)} треків{(" · " + desc) if desc else ""} · {hint}</div>
 {rows}
-</div></body></html>"""
+{footer}
+</div>{script}</body></html>"""

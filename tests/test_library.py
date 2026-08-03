@@ -250,7 +250,10 @@ class TestHtmlView:
             catalog_id="1", artist="A", title="T", isrc="X", release_date="1990-01-01",
             url="https://music.apple.com/pt/album/x/1?i=2"), entry_id="e1")]
         out = render(pl, tracks)
-        assert "music://music.apple.com/pt/album/x/1?i=2" in out
+        # The track's own page, not the album it happens to sit on: the album
+        # form leaves the track unselected when the app opens.
+        assert "music://music.apple.com/pt/song/1" in out
+        assert "/album/" not in out
         assert "https://music.apple.com" not in out  # scheme rewritten, no browser link
         assert "Mix" in out and "1990" in out
 
