@@ -1,8 +1,13 @@
 # AI Music Curator
 
-Build and clean streaming playlists from the command line, on your own machine,
-with your own account. Apple Music today; the design keeps other services one
-file away.
+Build and clean streaming playlists on your own machine, with your own account,
+by describing what you want in plain language. Apple Music today; the design
+keeps other services one file away.
+
+You talk to an AI assistant — the one this ships with is Claude Code — and it
+does the searching, matching and checking, then shows you the finished playlist
+and waits for your yes. There is a command line underneath, and you are welcome
+to use it, but it is the machinery rather than the interface.
 
 **Status: early.** The matching layer and its tests are real; the CLI is being
 built. Nothing here writes to your library without showing you the exact result
@@ -50,6 +55,8 @@ matched through an English translation of the title.
 - macOS, Linux or Windows
 - Python 3.11+
 - An active Apple Music subscription
+- An AI assistant that can run commands in a folder — [Claude Code](https://claude.com/claude-code)
+  is what this is built for. Optional: the command line works on its own.
 - No Apple Developer account, and no payment
 
 ## Install
@@ -64,8 +71,10 @@ A browser opens once so you can sign in to Apple Music yourself — the token
 goes to your OS keychain, never into this repo, and is scoped to Apple Music
 alone. It lasts about 180 days. Revoke it any time with `applemusic-mcp logout`.
 
-Then open Claude Code in that folder and say what you want. Nothing else to set
-up, no files to manage.
+Then open Claude Code in that folder and say what you want — it finds the
+instructions it needs inside the repository. Nothing else to set up, no files to
+manage. Another assistant, or no assistant at all, works too; see
+[Which assistant](#which-assistant).
 
 Running `./setup.sh` again is safe: each step checks whether it is already done.
 
@@ -97,20 +106,78 @@ when the checkout has uncommitted changes, since pulling would destroy them.
 
 ## Use
 
-You talk; the tool works. There is no workflow to learn and no file to manage.
+There is no workflow to learn and no file to manage. You say what you want the
+way you would say it to a person who happens to have your whole library open in
+front of them. Underneath, every request becomes the same handful of operations:
+search the catalog, match text to real recordings, compare against what is
+already there, and — only after you approve — write.
+
+**Give it a list, get a playlist.** Paste twenty lines of `Artist — Title` from a
+blog, drop in a screenshot of someone's story, or read them off a photographed
+record sleeve. It searches each one, tells you which matched confidently and
+which need your eye, and shows you the finished tracklist before it touches
+anything. A list in Japanese, Portuguese or Cyrillic is not a problem — the
+assistant writes the query in the script the artist actually releases under,
+which is most of why the match succeeds where transfer services fail.
 
 > Here's a list of songs I found. Make me a playlist.
 
+**Ask for a playlist you can't quite specify.** You do not need the song names.
+Describe the thing — a decade, a mood, a country, a feeling, "like that one but
+calmer" — and let it propose a tracklist you edit by talking. Then ask it for a
+few name and description options, and pick one.
+
 > Build something like my Japan 70-80s playlist, but only the originals.
+>
+> Something for a long drive at night. Portuguese, nothing after 1990.
+
+**Interrogate what you already have.** A playlist name is a claim, and claims can
+be checked. It reads the era from the ISRC rather than the release date, so a
+1976 single reissued in 2007 is still 1976, and a 2014 re-recording pretending to
+be the original gets caught.
 
 > Check this playlist — does it actually match its name?
+>
+> What's the oldest thing in here? Show me the decades.
+>
+> Is anything in my library duplicated across two playlists?
+
+**Clean without losing anything.** Duplicates proven by ISRC, the same song in
+two different recordings, live and karaoke cuts sitting where studio versions
+should be, tracks recorded outside the era the name promises, one artist filed
+under two names. It reports all of it, explains which are real defects and which
+are judgement calls, and asks before removing anything. If a live cut is the only
+version that exists, it says so instead of quietly dropping the track.
 
 > Clean it up: kill the duplicates and anything that isn't from the era.
+>
+> Replace the live versions with studio ones where a studio one exists.
+>
+> Fold my second Japan playlist into the first and drop the overlap.
 
-Ask in whatever words you'd use with a person. Underneath, each of those becomes
-the same handful of operations: search the catalog, match text to real
-recordings, compare against what's already there, and — only after you approve —
-write.
+**Change your mind afterwards.** Every playlist is copied before and after each
+change, automatically. Undo is a sentence, not a procedure.
+
+> What did we change yesterday? Put it back the way it was.
+
+**And the small things.** Play a track to check it is the right one before you
+commit to it. Get a scrollable HTML page of a long tracklist, with links that
+open in the Music app, instead of a wall of terminal output. Generate cover art
+for a playlist. See one page for everything you own.
+
+### Which assistant
+
+Built and used with [Claude Code](https://claude.com/claude-code), which picks up
+`.claude/skills/music-curator/SKILL.md` from this repository automatically — clone,
+run setup, start talking. Nothing to configure.
+
+Nothing about the design is Claude-specific, though. `aimc` is an ordinary
+command-line program, and the skill file is ordinary Markdown describing when to
+run what, so any assistant that can read a file and run a command in this folder
+can drive it. [AGENTS.md](AGENTS.md) exists so the tools that follow that
+convention — Codex CLI, Cursor, Gemini CLI and others — find those instructions
+without being told. That path is untested; if you try it and it works, or
+doesn't, [say so](https://github.com/avyshnya/ai-music-curator/issues).
 
 ### Nothing is written until you say so
 
@@ -133,10 +200,21 @@ Under the hood a playlist is a text file identified by ISRCs rather than
 Apple-specific ids, which is what makes the history diffable and what will let
 the same playlist target another service later. You are not expected to care.
 
-### For scripting
+### The command line, if you want it
 
-There is a CLI underneath if you want one — `aimc --help`. It is the machinery,
-not the point.
+Everything above is the assistant driving `aimc`, and you can drive it yourself
+instead. `aimc --help` lists all of it; the shape is:
+
+- **Look** — `playlists`, `show`, `stats`, `dashboard`, `scan`, `play`
+- **Judge** — `audit` finds duplicates, alternate versions, non-studio cuts and
+  era outliers; `resolve` matches a text list against the catalog. Neither
+  writes anything.
+- **Change** — `create`, `add`, `remove`, `merge`, `dedupe`, `delete`. Each one
+  requires `--yes`; without it you get the plan and nothing happens.
+- **Go back** — `snapshot`, `history`, `restore`
+- **Odds and ends** — `cover`, `version`, `update`
+
+Reads are always safe. Writes always snapshot first.
 
 ## Security
 
@@ -163,6 +241,8 @@ is preceded by reading the upstream diff, and the result is recorded in
 
 ## Project docs
 
+- [AGENTS.md](AGENTS.md) — what an AI assistant needs to know to operate this
+  safely, and where the full instructions live
 - [DEVLOG.md](DEVLOG.md) — why the code is the way it is: every matching rule
   traced back to the real failure that motivated it
 - [BACKLOG.md](BACKLOG.md) — what was tried and does not work, with evidence
