@@ -106,6 +106,35 @@ def cmd_show(
             typer.echo(f"     {s.url}")
 
 
+@app.command("stats")
+def cmd_stats(
+    playlist: str,
+    html_out: Path = typer.Option(
+        None, "--html", help="Write the dashboard as an HTML page here."
+    ),
+) -> None:
+    """A quick dashboard: decades, top artists, non-studio count, year span."""
+    from .stats import compute
+    try:
+        p, tracks = _lib().tracks(playlist)
+    except PlaylistNotFound as e:
+        _die(str(e))
+    s = compute(tracks)
+    if html_out is not None:
+        from .htmlview import render_stats
+        Path(html_out).write_text(render_stats(p, s), encoding="utf-8")
+        typer.echo(str(html_out))
+        return
+    span = f"{s.year_min}–{s.year_max}" if s.year_min and s.year_max else "—"
+    typer.echo(f"{p.name} — {s.total} tracks · {span} · {s.non_studio} non-studio\n")
+    typer.echo("decades:")
+    for k, v in s.decades:
+        typer.echo(f"  {k}: {v}")
+    typer.echo("top artists:")
+    for k, v in s.top_artists:
+        typer.echo(f"  {v:2}  {k}")
+
+
 @app.command("audit")
 def cmd_audit(
     playlist: str,
