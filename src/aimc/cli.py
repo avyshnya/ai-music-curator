@@ -35,6 +35,26 @@ def _die(msg: str) -> None:
     raise typer.Exit(1)
 
 
+def _preview(playlist, tracks, sample: int = 6) -> None:
+    """Show enough of a playlist to recognise it before a destructive action.
+
+    Name and count alone identify nothing in a large library; a few real
+    tracks do. Prints the name, description, count, a sample of tracks, and a
+    link to the first so it can be opened and checked.
+    """
+    typer.secho(f"{playlist.name} — {len(tracks)} tracks", bold=True)
+    if playlist.description:
+        typer.echo(f"  {playlist.description}")
+    for t in tracks[:sample]:
+        year = recording_year(t.song.isrc, t.song.release_date)
+        typer.echo(f"    {t.song.artist} — {t.song.title}" + (f"  · {year}" if year else ""))
+    if len(tracks) > sample:
+        typer.echo(f"    … and {len(tracks) - sample} more")
+    first_url = next((t.song.url for t in tracks if t.song.url), None)
+    if first_url:
+        typer.echo(f"  open: {first_url}")
+
+
 def _era(era: str | None) -> tuple[int, int] | None:
     if not era:
         return None
@@ -276,9 +296,11 @@ def cmd_delete(
         p, tracks = lib.tracks(playlist)
     except PlaylistNotFound as e:
         _die(str(e))
-    typer.echo(f"{p.name} — {len(tracks)} tracks")
+    # Enough to recognise WHICH playlist this is. In a library of a hundred,
+    # a name and a count identify nothing — the tracks do.
+    _preview(p, tracks)
     if not yes:
-        typer.secho("preview — pass --yes to delete", fg=typer.colors.YELLOW)
+        typer.secho("\npreview — pass --yes to delete", fg=typer.colors.YELLOW)
         return
     try:
         lib.delete(playlist)
