@@ -80,12 +80,20 @@ def cmd_playlists() -> None:
 def cmd_show(
     playlist: str,
     links: bool = typer.Option(True, help="Include a link to each track."),
+    html_out: Path = typer.Option(
+        None, "--html", help="Write a self-contained HTML page here instead of printing."
+    ),
 ) -> None:
-    """Print a playlist, one track per line."""
+    """Print a playlist, one track per line — or render it as an HTML page."""
     try:
         p, tracks = _lib().tracks(playlist)
     except PlaylistNotFound as e:
         _die(str(e))
+    if html_out is not None:
+        from .htmlview import render
+        Path(html_out).write_text(render(p, tracks), encoding="utf-8")
+        typer.echo(str(html_out))
+        return
     typer.echo(f"{p.name} — {len(tracks)} tracks\n")
     for i, t in enumerate(tracks, 1):
         s = t.song

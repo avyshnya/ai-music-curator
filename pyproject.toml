@@ -43,3 +43,5 @@ testpaths = ["tests"]
 [tool.ruff.lint.per-file-ignores]
 # typer's documented idiom is a call in the default; B008 is a false positive here.
 "src/aimc/cli.py" = ["B008"]
+# A single HTML/CSS template string; wrapping its lines would hurt readability.
+"src/aimc/htmlview.py" = ["E501"]

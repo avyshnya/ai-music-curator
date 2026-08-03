@@ -239,3 +239,27 @@ class TestDelete:
         lib.provider.tracks[[k for k,v in lib.provider.data.items() if v.name=="Mine"][0]] = []
         lib.restore("Mine", before)
         assert len(lib.tracks("Mine")[1]) == 2
+
+
+class TestHtmlView:
+    def test_renders_music_scheme_links(self):
+        from aimc.htmlview import render
+        from aimc.providers.base import Playlist, Song
+        pl = Playlist(id="p1", name="Mix", description="desc", editable=True)
+        tracks = [PlaylistTrack(song=Song(
+            catalog_id="1", artist="A", title="T", isrc="X", release_date="1990-01-01",
+            url="https://music.apple.com/pt/album/x/1?i=2"), entry_id="e1")]
+        out = render(pl, tracks)
+        assert "music://music.apple.com/pt/album/x/1?i=2" in out
+        assert "https://music.apple.com" not in out  # scheme rewritten, no browser link
+        assert "Mix" in out and "1990" in out
+
+    def test_escapes_html(self):
+        from aimc.htmlview import render
+        from aimc.providers.base import Playlist, Song
+        pl = Playlist(id="p1", name="X", editable=True)
+        tracks = [PlaylistTrack(song=Song(catalog_id="1", artist="A & B",
+                  title="<script>", isrc=None), entry_id="e1")]
+        out = render(pl, tracks)
+        assert "<script>" not in out.split("<body>")[1]
+        assert "&lt;script&gt;" in out
