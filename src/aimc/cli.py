@@ -135,6 +135,43 @@ def cmd_stats(
         typer.echo(f"  {v:2}  {k}")
 
 
+@app.command("version")
+def cmd_version() -> None:
+    """Which copy is installed, where it came from, and whether it is current."""
+    from .selfupdate import check, installed_from, local_version
+    repo = installed_from()
+    if repo is None:
+        typer.echo("встановлено не з теки (або встановлення не знайдено)")
+        return
+    typer.echo(f"версія: {local_version(repo) or '?'}")
+    typer.echo(f"зібрано з: {repo}")
+    typer.echo("одна команда aimc на систему — другої копії не буває")
+    behind, msg = check(repo)
+    typer.secho(msg, fg=typer.colors.YELLOW if behind else typer.colors.GREEN)
+    if behind:
+        typer.echo("оновитися: aimc update")
+
+
+@app.command("update")
+def cmd_update(
+    yes: bool = typer.Option(False, "--yes", help="Required. Without it, only checks."),
+) -> None:
+    """Bring this copy up to date. Never happens on its own."""
+    from .selfupdate import check, installed_from, update
+    repo = installed_from()
+    if repo is None:
+        _die("не бачу, з якої теки встановлено — онови вручну")
+    behind, msg = check(repo)
+    typer.echo(msg)
+    if not behind:
+        return
+    if not yes:
+        typer.secho("перевірка — додай --yes щоб оновити", fg=typer.colors.YELLOW)
+        return
+    ok, out = update(repo)
+    typer.secho(out, fg=typer.colors.GREEN if ok else typer.colors.RED)
+
+
 @app.command("dashboard")
 def cmd_dashboard(
     out: Path = typer.Option(None, "--out", help="Write the page here instead of a temp file."),

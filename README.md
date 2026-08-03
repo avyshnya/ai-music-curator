@@ -69,6 +69,32 @@ up, no files to manage.
 
 Running `./setup.sh` again is safe: each step checks whether it is already done.
 
+### One copy, not two
+
+`uv` keeps one tool per package name, so there is never a second `aimc` —
+running setup from another folder repoints the existing command rather than
+duplicating it. Setup notices that and asks before switching, so nobody has
+their edits quietly stop taking effect.
+
+```bash
+aimc version
+```
+
+shows the version, the folder it was built from, and whether anything newer
+exists upstream.
+
+### Updates
+
+Nothing updates itself. A tool holding a token to your music library should
+not replace its own code between runs, so this one changes only when asked:
+
+```bash
+aimc update --yes
+```
+
+Without `--yes` it only reports whether an update exists. It refuses to run
+when the checkout has uncommitted changes, since pulling would destroy them.
+
 ## Use
 
 You talk; the tool works. There is no workflow to learn and no file to manage.

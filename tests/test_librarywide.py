@@ -110,3 +110,32 @@ class TestCover:
 
     def test_title_is_escaped(self):
         assert "&amp;" in svg("Rock & Roll", "", "sunset", "sun")
+
+
+class TestSelfUpdate:
+    """Updating is always asked for. Nothing here runs on its own."""
+
+    def test_version_is_read_from_pyproject(self, tmp_path):
+        from aimc.selfupdate import local_version
+        (tmp_path / "pyproject.toml").write_text('name = "x"\nversion = "1.2.3"\n')
+        assert local_version(tmp_path) == "1.2.3"
+
+    def test_no_pyproject_no_version(self, tmp_path):
+        from aimc.selfupdate import local_version
+        assert local_version(tmp_path) is None
+
+    def test_non_git_copy_is_refused(self, tmp_path):
+        from aimc.selfupdate import check, update
+        assert check(tmp_path)[0] is False
+        ok, msg = update(tmp_path)
+        assert ok is False and "вручну" in msg
+
+    def test_dirty_checkout_is_refused(self, tmp_path):
+        """Pulling over uncommitted work would destroy it silently."""
+        import subprocess
+
+        from aimc.selfupdate import update
+        subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+        (tmp_path / "file.txt").write_text("uncommitted")
+        ok, msg = update(tmp_path)
+        assert ok is False and "незбережені" in msg
