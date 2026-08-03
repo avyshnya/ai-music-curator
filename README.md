@@ -146,3 +146,21 @@ is preceded by reading the upstream diff, and the result is recorded in
 
 MIT. This is an unofficial project, not affiliated with Apple, for use with your
 own account.
+
+## Developing
+
+```bash
+PYTHONPATH=src uv run --with pytest --with typer pytest -q
+uv run --with ruff ruff check src tests
+```
+
+Reinstalling the CLI from a working copy needs `--no-cache`:
+
+```bash
+uv tool install --force --no-cache .
+```
+
+Without it `uv` can serve a cached wheel and you will test the previous
+version while believing you are testing the current one. This bites hardest
+when the checkout lives on a cloud-synced folder, where modification times are
+not always what a build tool expects.
