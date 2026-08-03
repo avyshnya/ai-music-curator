@@ -142,6 +142,14 @@ is preceded by reading the upstream diff, and the result is recorded in
 - **Play music.** Use a music player.
 - **Download anything.**
 
+## Project docs
+
+- [DEVLOG.md](DEVLOG.md) — why the code is the way it is: every matching rule
+  traced back to the real failure that motivated it
+- [BACKLOG.md](BACKLOG.md) — what was tried and does not work, with evidence
+- [deps.lock.md](deps.lock.md) — the pinned dependency and its security audit
+- [Issues](https://github.com/avyshnya/ai-music-curator/issues) — what is next
+
 ## Licence
 
 MIT. This is an unofficial project, not affiliated with Apple, for use with your
