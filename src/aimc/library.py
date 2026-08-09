@@ -8,7 +8,7 @@ a playlist it cannot restore has no business being pointed at someone's music.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from . import snapshots
@@ -118,7 +118,11 @@ class Library:
     def rename(self, name_or_id: str, new_name: str) -> Playlist:
         p, _ = self._guard(name_or_id, "rename")
         self.provider.rename_playlist(p.id, new_name)
-        return p
+        # The object was read before the write, so it still carries the old
+        # name. Handing it back unchanged made the CLI report "renamed to
+        # 'City Pop'" after renaming that very playlist to something else —
+        # a confirmation that quietly contradicted what had just happened.
+        return replace(p, name=new_name)
 
     def create(self, name: str, description: str = "",
                catalog_ids: list[str] | None = None) -> str:

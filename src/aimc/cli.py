@@ -540,6 +540,22 @@ def cmd_create(
     typer.secho(f"created {name!r} ({pid})", fg=typer.colors.GREEN)
 
 
+@app.command("rename")
+def cmd_rename(
+    playlist: str,
+    new_name: str,
+    yes: bool = typer.Option(False, "--yes", help="Required. Confirms the write."),
+) -> None:
+    """Give a playlist a different name. The tracks are untouched."""
+    if not yes:
+        _die("refusing to write without --yes")
+    try:
+        p = _lib().rename(playlist, new_name)
+    except (PlaylistNotFound, NotEditable) as e:
+        _die(str(e))
+    typer.secho(f"renamed to {p.name!r}", fg=typer.colors.GREEN)
+
+
 @app.command("merge")
 def cmd_merge(
     source: str,

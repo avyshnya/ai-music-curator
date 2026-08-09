@@ -29,6 +29,7 @@ _CSS = """
   input[type=text] { width:100%; font:inherit; padding:11px; border-radius:10px;
     border:1px solid color-mix(in srgb,CanvasText 20%,Canvas);
     background:Canvas; color:CanvasText; }
+  .own { margin:-2px 0 8px; }
   button { font:inherit; padding:12px 22px; border:0; border-radius:11px;
     background:#22c55e; color:#fff; cursor:pointer; margin-top:20px; }
 """
@@ -42,10 +43,16 @@ def _opts(kind: str, values: list[str]) -> str:
             f'<label><input type="radio" name="{kind}" value="{html.escape(v)}"{chk}>'
             f'<span>{html.escape(v)}</span></label>'
         )
+    # The free-text field sits OUTSIDE its label, and typing in it selects the
+    # radio. Nested inside, it silently ate what people wrote: clicking an input
+    # within a label does not activate that label, so the radio stayed on the
+    # first preset and the typed text was never read. Someone named a playlist
+    # that way and got the default instead — with no hint anything was ignored.
     out.append(
-        f'<label><input type="radio" name="{kind}" value="__own__">'
-        f'<span style="flex:1"><input type="text" id="{kind}_own" '
-        f'placeholder="свій варіант"></span></label>'
+        f'<label><input type="radio" name="{kind}" value="__own__" '
+        f'id="{kind}_own_radio"><span>свій варіант</span></label>'
+        f'<input type="text" class="own" id="{kind}_own" placeholder="напиши свій"'
+        f' oninput="document.getElementById(\'{kind}_own_radio\').checked = true">'
     )
     return "\n".join(out)
 
